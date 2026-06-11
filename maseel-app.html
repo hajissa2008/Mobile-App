@@ -811,7 +811,11 @@ function escH(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 function visibleAC(){
   if(!AUTH.user||!AUTH.user.username)return AC;
   var e=AUTH.user.username.toLowerCase();
-  return AC.filter(function(a){return!a.responsible||a.responsible===e;});
+  console.log('[perm] logged in as:', e);
+  console.log('[perm] sample activity:', AC[0]||'none');
+  var r=AC.filter(function(a){return!a.responsible||a.responsible===e;});
+  console.log('[perm] visible:', r.length, 'of', AC.length);
+  return r;
 }
 function visiblePH(){
   var ids={};visibleAC().forEach(function(a){ids[a.ph]=1;});
