@@ -458,11 +458,11 @@ _maseel_ready = 1;
 /* ══════════════════════════════════════════
    SHAREPOINT CONFIG
 ══════════════════════════════════════════ */
+var FILE_NAME    = 'EMSL-15-P6 Update 3-Jun-2026 G.xlsx';
+var DATA_DATE    = '2026-06-03';
 var SP_SHARE_URL = 'https://sascontractingsa-my.sharepoint.com/:x:/g/personal/m_hajissa_alenshaiah_com/IQBWPlRlHWXfRaDvQFQ_KwqwAev8f2TofrG6dDr2S7g3KVc?e=FdWMQt';
 var SP_DL_URL    = SP_SHARE_URL + '&download=1';
 var GH_DL_URL    = 'https://raw.githubusercontent.com/hajissa2008/Mobile-App/main/' + encodeURIComponent(FILE_NAME);
-var DATA_DATE    = '2026-06-03';
-var FILE_NAME    = 'EMSL-15-P6 Update 3-Jun-2026 G.xlsx';
 
 /* ══════════════════════════════════════════
    EMBEDDED FALLBACK DATA  (extracted 3-Jun-2026)
@@ -1324,10 +1324,11 @@ document.addEventListener('click',function(e){
     x.fillText('M',s/2,s/2+1);
     return c.toDataURL('image/png');
   }
+  var loc=window.location,base=loc.origin+loc.pathname;
   var m={
     name:'Maseel \u2014 Schedule Viewer',short_name:'Maseel',
     description:'Live P6 project schedule viewer',
-    start_url:'.',scope:'.',display:'standalone',
+    start_url:base,scope:base,display:'standalone',
     display_override:['standalone','minimal-ui'],
     background_color:'#070C16',theme_color:'#070C16',
     orientation:'portrait',prefer_related_applications:false,
