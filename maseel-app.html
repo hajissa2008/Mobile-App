@@ -1065,9 +1065,11 @@ function rProfile(){
   var dsSubTxt=dsLive?DS.acts+' activities loaded live':DS.error?DS.error.substring(0,60):'Offline — using embedded export';
   var refBtnCol=dsLive?'color:#10B981;background:rgba(16,185,129,.12)':'color:#F59E0B;background:rgba(245,158,11,.1)';
 
-  var h='<div class="prof-hd"><div class="avatar">MA</div>'+
-    '<div><div class="p-name">Muhannad Al-Rashidi</div>'+
-    '<div class="p-role">Senior Construction Inspector</div>'+
+  var pName = AUTH._profile || (AUTH.user?AUTH.user.name:'') || AUTH.user?.username || 'User';
+  var pInitials = (pName.match(/\b\w/g)||[]).slice(0,2).join('').toUpperCase() || '?';
+  var h='<div class="prof-hd"><div class="avatar">'+pInitials+'</div>'+
+    '<div><div class="p-name">'+escH(pName)+'</div>'+
+    '<div class="p-role">'+(AUTH.user?escH(AUTH.user.username||''):'Not signed in')+'</div>'+
     '<div class="p-proj">Maseel Mixed-Use Development — EMSL-15</div></div></div>'+
 
     '<div class="ds-card '+dsCls+'">'+
