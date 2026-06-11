@@ -659,7 +659,8 @@ function parseP6Buffer(buffer) {
         s:es||DATA_DATE, f:ef||DATA_DATE,
         st:status,
         pc:status==='Done'?100:status==='In Progress'?50:0,
-        float:flt, dur:parseInt(row[2])||0
+        float:flt, dur:parseInt(row[2])||0,
+        responsible:(row[8]||'').toString().trim().toLowerCase()
       });
     } else {
       pathStack[indent] = stripped;
@@ -806,6 +807,23 @@ function flB(f){if(f==null)return'';if(f<0)return'<span class="b b-ov">Overdue</
 function circInner(s){if(s==='Done')return I.chkW;if(s==='In Progress')return I.dot7;return'';}
 function escH(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
+/* ── Permission filtering ── */
+function visibleAC(){
+  if(!AUTH.user||!AUTH.user.username)return AC;
+  var e=AUTH.user.username.toLowerCase();
+  return AC.filter(function(a){return!a.responsible||a.responsible===e;});
+}
+function visiblePH(){
+  var ids={};visibleAC().forEach(function(a){ids[a.ph]=1;});
+  return PH.filter(function(p){return ids[p.id];});
+}
+function permBanner(){
+  var v=visibleAC();
+  if(v.length===AC.length)return'';
+  return'<div style="margin:0 16px 8px;padding:8px 12px;background:rgba(59,130,246,.08);border-radius:8px;font-size:11px;color:var(--bl);display:flex;align-items:center;gap:6px">'+
+    I.user+' Showing '+v.length+' of '+AC.length+' activities assigned to you</div>';
+}
+
 /* connection banner */
 function connBanner() {
   var state=DS.state;
@@ -830,9 +848,10 @@ function connBanner() {
 ══════════════════════════════════════════ */
 function rToday(){
   var q=(ST.searchQ||'').toLowerCase();
+  var vAC=visibleAC();
   var active=[];
-  for(var i=0;i<AC.length;i++){
-    var a=AC[i];var st=effSt(a);
+  for(var i=0;i<vAC.length;i++){
+    var a=vAC[i];var st=effSt(a);
     if(st==='Done')continue;
     if(a.s<=DATA_DATE&&a.f>=DATA_DATE){
       if(!q||a.title.toLowerCase().indexOf(q)>-1||a.id.toLowerCase().indexOf(q)>-1||(a.disc||'').toLowerCase().indexOf(q)>-1)
@@ -840,11 +859,11 @@ function rToday(){
     }
   }
   var inP=0,ov=0;
-  for(var i=0;i<AC.length;i++){var s=effSt(AC[i]);if(s==='In Progress')inP++;if(s!=='Done'&&(AC[i].f<DATA_DATE||(AC[i].float!=null&&AC[i].float<0)))ov++;}
+  for(var i=0;i<vAC.length;i++){var s=effSt(vAC[i]);if(s==='In Progress')inP++;if(s!=='Done'&&(vAC[i].f<DATA_DATE||(vAC[i].float!=null&&vAC[i].float<0)))ov++;}
   var grp={};
   for(var i=0;i<active.length;i++){var a=active[i];if(!grp[a.ph])grp[a.ph]=[];grp[a.ph].push(a);}
 
-  var h=connBanner()+
+  var h=connBanner()+permBanner()+
     '<div class="ph-hdr">'+
       '<div class="ph-date">'+(new Date().toLocaleDateString('en-US',{weekday:'long',day:'numeric',month:'long',year:'numeric'}))+'</div>'+
       '<div class="ph-title">Active Activities</div>'+
@@ -906,12 +925,13 @@ function buildCard(a){
 ══════════════════════════════════════════ */
 function rTimeline(){
   var q=(ST.searchQ||'').toLowerCase();
-  var total=AC.length,done_t=0;
-  for(var i=0;i<AC.length;i++)if(effSt(AC[i])==='Done')done_t++;
+  var vAC=visibleAC();
+  var total=vAC.length,done_t=0;
+  for(var i=0;i<vAC.length;i++)if(effSt(vAC[i])==='Done')done_t++;
   var ovr=total?Math.round(100*done_t/total):0;
   var phOrder=['MOB','SD','P1','P2','P3','P4','P5','ML'];
 
-  var h=connBanner()+
+  var h=connBanner()+permBanner()+
     '<div style="padding:16px 20px 12px;display:flex;align-items:center;justify-content:space-between">'+
       '<div style="font-family:var(--FD);font-size:22px;font-weight:800;letter-spacing:-.4px">P6 Schedule</div>'+
       '<div style="font-size:11px;font-weight:700;color:var(--t3);background:var(--bg2);border:1px solid var(--bd);border-radius:9px;padding:5px 10px">EMSL-15</div>'+
@@ -921,7 +941,7 @@ function rTimeline(){
       '" oninput="ST.searchQ=this.value;rTimeline()" autocomplete="off" autocorrect="off" spellcheck="false">'+
     '</div></div>'+
     '<div class="ovr">'+
-      '<div class="ovr-r"><span class="ovr-lbl">Overall Progress · '+AC.length+' activities</span><span class="ovr-pct">'+ovr+'%</span></div>'+
+      '<div class="ovr-r"><span class="ovr-lbl">Overall Progress'+(vAC.length!==AC.length?' · '+vAC.length+' of '+AC.length+' activities':' · '+AC.length+' activities')+'</span><span class="ovr-pct">'+ovr+'%</span></div>'+
       '<div class="ovr-bar"><div class="ovr-fill" style="width:'+ovr+'%"></div></div>'+
       '<div class="ovr-dates"><span>Oct 2025</span><span>Jun 2027</span></div>'+
       '<div class="ph-pills">';
@@ -932,11 +952,16 @@ function rTimeline(){
   }
   h+='</div></div>';
 
+  /* Build visible phases set */
+  var vPhIds={};
+  for(var i=0;i<vAC.length;i++)vPhIds[vAC[i].ph]=1;
+
   for(var pi=0;pi<phOrder.length;pi++){
     var phId=phOrder[pi],ph=phOf(phId);if(!ph)continue;
+    if(!vPhIds[phId]&&!q)continue;
     var acts=[];
-    for(var i=0;i<AC.length;i++){
-      var a=AC[i];if(a.ph!==phId)continue;
+    for(var i=0;i<vAC.length;i++){
+      var a=vAC[i];if(a.ph!==phId)continue;
       if(q&&a.title.toLowerCase().indexOf(q)===-1&&a.id.toLowerCase().indexOf(q)===-1&&(a.disc||'').toLowerCase().indexOf(q)===-1)continue;
       acts.push(a);
     }
@@ -989,9 +1014,10 @@ function rTimeline(){
    RENDER PROFILE
 ══════════════════════════════════════════ */
 function rProfile(){
+  var vAC=visibleAC();
   var done=0,ip=0,ns=0;
-  for(var i=0;i<AC.length;i++){var s=effSt(AC[i]);if(s==='Done')done++;else if(s==='In Progress')ip++;else ns++;}
-  var pct=AC.length?Math.round(100*done/AC.length):0;
+  for(var i=0;i<vAC.length;i++){var s=effSt(vAC[i]);if(s==='Done')done++;else if(s==='In Progress')ip++;else ns++;}
+  var pct=vAC.length?Math.round(100*done/vAC.length):0;
 
   /* data source card */
   var dsLive=DS.state==='live';
@@ -1028,7 +1054,7 @@ function rProfile(){
         '<span style="color:#34D399">'+I.chkW+' '+done+' Done</span>'+
         '<span style="color:#60A5FA">↗ '+ip+' In Progress</span>'+
         '<span style="color:var(--t3)">○ '+ns+' Pending</span>'+
-        '<span>'+AC.length+' total</span>'+
+        '<span>'+vAC.length+' of '+AC.length+' total</span>'+(vAC.length!==AC.length?'<span style="color:var(--bl);font-size:10px">filtered</span>':'')+
       '</div>'+
       (DS.state!=='live'&&!dsLoad?
         '<div style="margin-top:11px;padding:10px 0 0;border-top:1px solid var(--bd)">'+
