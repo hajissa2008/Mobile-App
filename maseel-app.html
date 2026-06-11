@@ -1011,33 +1011,7 @@ function rProfile(){
           '<button onclick="logoutMsal()" style="background:rgba(239,68,68,.1);border:0;color:#EF4444;padding:6px 12px;border-radius:6px;font-size:11px;cursor:pointer;-webkit-appearance:none">Logout</button>'):
         _sr(I.user,'rgba(59,130,246,.12)','var(--bl)','Microsoft Account','Not connected',
           '<button onclick="loginMsal()" style="background:rgba(16,185,129,.1);border:0;color:#10B981;padding:6px 12px;border-radius:6px;font-size:11px;cursor:pointer;-webkit-appearance:none">Sign In</button>')):
-        _sr(I.user,'rgba(107,114,128,.12)','var(--t3)','Microsoft Account','Disabled',
-          '<button onclick="'+
-            "document.getElementById('mse').style.display='block';"+
-          '" style="background:rgba(59,130,246,.1);border:0;color:var(--bl);padding:6px 12px;border-radius:6px;font-size:11px;cursor:pointer;-webkit-appearance:none">Configure</button>'))+
-      _sr(I.set,'rgba(107,114,128,.12)','var(--t3)','SSO Config',
-        '<span id="mse-cfg-summary" style="font-size:10px;color:var(--t3)">'+
-          (AUTH.clientId?(AUTH.clientId.substring(0,15)+'…'+'/'+AUTH.tenantId.substring(0,8)+'…'):'Not set')+
-        '</span>',
-        '<button onclick="'+
-          "var e=document.getElementById('mse');e.style.display=e.style.display==='none'?'block':'none';"+
-        '" style="background:none;border:0;color:var(--t3);padding:4px;cursor:pointer;-webkit-appearance:none">'+I.set+'</button>')+
-    '</div>'+
-    '<div id="mse" style="display:none;margin:0 0 16px;padding:14px;background:var(--bg2);border-radius:12px;border:1px solid var(--bd)">'+
-      '<div style="font-size:12px;font-weight:600;color:var(--t1);margin-bottom:10px">Microsoft SSO Configuration</div>'+
-      '<div style="margin-bottom:8px">'+
-        '<label style="display:block;font-size:10px;color:var(--t3);margin-bottom:3px">Client ID</label>'+
-        '<input id="mse-cid" value="'+escH(AUTH.clientId)+'" placeholder="00000000-0000-0000-0000-000000000000" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bd);color:var(--t1);padding:8px 10px;border-radius:6px;font-size:12px">'+
-      '</div>'+
-      '<div style="margin-bottom:10px">'+
-        '<label style="display:block;font-size:10px;color:var(--t3);margin-bottom:3px">Tenant ID</label>'+
-        '<input id="mse-tid" value="'+escH(AUTH.tenantId)+'" placeholder="00000000-0000-0000-0000-000000000000" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bd);color:var(--t1);padding:8px 10px;border-radius:6px;font-size:12px">'+
-      '</div>'+
-      '<button onclick="'+
-        "AUTH.clientId=document.getElementById('mse-cid').value.trim();"+
-        "AUTH.tenantId=document.getElementById('mse-tid').value.trim();"+
-        'saveAuthCfg();initMsal();rProfile();'+
-      '" style="width:100%;background:var(--bl);color:#fff;border:0;padding:8px;border-radius:6px;font-size:12px;cursor:pointer;-webkit-appearance:none">Save &amp; Activate</button>'+
+        _sr(I.user,'rgba(107,114,128,.12)','var(--t3)','Microsoft Account','Pre-configured',''))+
     '</div>'+
     '<div style="height:24px"></div>';
 
