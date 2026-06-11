@@ -343,9 +343,42 @@ textarea::placeholder{color:var(--t3)}
 .ld-sub{font-size:11px;color:var(--t3);text-align:center;max-width:240px;line-height:1.5}
 .ld-bar{width:140px;height:3px;background:var(--bd);border-radius:2px;overflow:hidden;margin-top:4px}
 .ld-fill{height:100%;border-radius:2px;background:var(--a);width:0;transition:width .4s ease}
+
+/* ── LOGIN SCREEN ── */
+#login-screen{position:fixed;inset:0;background:var(--bg0);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;z-index:500;transition:opacity .5s}
+#login-screen.hidden{opacity:0;pointer-events:none}
+.ls-logo{width:72px;height:72px;margin-bottom:24px}
+.ls-logo svg{width:100%;height:100%}
+.ls-name{font-family:var(--FD);font-size:20px;font-weight:700;color:var(--t1);letter-spacing:.5px;margin-bottom:4px}
+.ls-sub{font-size:11px;color:var(--t3);margin-bottom:48px;text-align:center}
+.ls-btn{display:flex;align-items:center;gap:10px;background:var(--bl1);color:#fff;border:0;
+  padding:12px 28px;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer;
+  touch-action:manipulation;-webkit-appearance:none;transition:transform .15s,box-shadow .15s;
+  box-shadow:0 4px 14px rgba(59,130,246,.3)}
+.ls-btn:active{transform:scale(.96)}
+.ls-foot{position:fixed;bottom:40px;font-size:10px;color:var(--t3);text-align:center;line-height:1.6}
 </style>
 </head>
 <body ontouchstart="">
+<!-- Login screen overlay (shown when not signed in) -->
+<div id="login-screen" class="hidden">
+  <div class="ls-logo">
+    <svg viewBox="0 0 72 72" fill="none">
+      <rect width="72" height="72" rx="16" fill="#0C1829"/>
+      <path d="M36 14L52 27v18l-16 13-16-13V27l16-13z" fill="#1E3A5F" stroke="#60A5FA" stroke-width="1.5"/>
+      <path d="M36 24l8 6v10l-8 6-8-6V30l8-6z" fill="#3B82F6" opacity=".6"/>
+      <circle cx="36" cy="36" r="6" fill="#60A5FA" opacity=".3"/>
+    </svg>
+  </div>
+  <div class="ls-name">Alenshaiah</div>
+  <div class="ls-sub">Maseel Schedule · EMSL-15</div>
+  <button class="ls-btn" onclick="loginMsal()" id="ls-btn">
+    <svg width="18" height="18" viewBox="0 0 21 21" fill="none"><rect x="1" y="1" width="9" height="9" fill="#F25022"/><rect x="11" y="1" width="9" height="9" fill="#7FBA00"/><rect x="1" y="11" width="9" height="9" fill="#00A4EF"/><rect x="11" y="11" width="9" height="9" fill="#FFB900"/></svg>
+    Sign in with Microsoft
+  </button>
+  <div class="ls-foot">Alenshaiah Contracting Co. © 2026</div>
+</div>
 <div id="app">
   <div style="padding-top:var(--sat)"></div>
   <div class="screens">
@@ -478,27 +511,48 @@ function initMsal(){
   AUTH.instance.handleRedirectPromise().then(function(resp){
     if(resp&&!resp.account)return;
     if(resp&&resp.account){AUTH.user=resp.account;AUTH._profile=resp.account.name||resp.account.username||'';try{localStorage.setItem('msal_profile',AUTH._profile);}catch(e){}}
+    try{hideLoginScreen();}catch(e){}
     try{rProfile();}catch(e){}
   }).catch(function(){});
   var accounts=AUTH.instance.getAllAccounts();
   if(accounts&&accounts.length>0){AUTH.user=accounts[0];}
 }
 
+function showLoginScreen(){
+  var ls=document.getElementById('login-screen');
+  if(ls)ls.classList.remove('hidden');
+  var app=document.getElementById('app');
+  if(app)app.style.display='none';
+}
+function hideLoginScreen(){
+  var ls=document.getElementById('login-screen');
+  if(ls)ls.classList.add('hidden');
+  var app=document.getElementById('app');
+  if(app)app.style.display='';
+}
+
 function loginMsal(){
   if(!AUTH.instance)return;
+  var btn=document.getElementById('ls-btn');
+  if(btn){btn.disabled=true;btn.innerHTML='Signing in…';}
   var loginRequest={scopes:['User.Read','openid','profile']};
   AUTH.instance.loginPopup(loginRequest).then(function(resp){
     AUTH.user=resp.account;
     AUTH._profile=resp.account.name||resp.account.username||'';
     try{localStorage.setItem('msal_profile',AUTH._profile);}catch(e){}
+    try{hideLoginScreen();}catch(e){}
     try{rProfile();}catch(e){}
-  }).catch(function(e){console.warn('MSAL login failed',e);});
+  }).catch(function(e){
+    console.warn('MSAL login failed',e);
+    if(btn){btn.disabled=false;btn.innerHTML='<svg width="18" height="18" viewBox="0 0 21 21" fill="none"><rect x="1" y="1" width="9" height="9" fill="#F25022"/><rect x="11" y="1" width="9" height="9" fill="#7FBA00"/><rect x="1" y="11" width="9" height="9" fill="#00A4EF"/><rect x="11" y="11" width="9" height="9" fill="#FFB900"/></svg> Sign in with Microsoft';}
+  });
 }
 
 function logoutMsal(){
   AUTH.user=null;AUTH._profile='';
   try{localStorage.removeItem('msal_profile');}catch(e){}
   try{rProfile();}catch(e){}
+  showLoginScreen();
 }
 
 try{loadAuth();initMsal();}catch(e){}
@@ -743,8 +797,7 @@ var I={
   sh:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
   gl:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
    link:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
-  user:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
-  set:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'
+  user:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>'
 };
 
 function stB(s){var k=sk(s);return'<span class="b b-'+k+'">'+s+'</span>';}
@@ -1006,12 +1059,10 @@ function rProfile(){
         '<button class="tog'+(ST.notif?' on':'')+'" onclick="togSt(\'notif\')"></button>')+
     '</div>'+
     '<div class="sgrp"><div class="sg-lbl">Account</div>'+
-      (AUTH.enabled?(AUTH.user?
+      (AUTH.user?
         _sr(I.user,'rgba(16,185,129,.12)','#10B981',AUTH._profile||AUTH.user.username||'User','Connected',
           '<button onclick="logoutMsal()" style="background:rgba(239,68,68,.1);border:0;color:#EF4444;padding:6px 12px;border-radius:6px;font-size:11px;cursor:pointer;-webkit-appearance:none">Logout</button>'):
-        _sr(I.user,'rgba(59,130,246,.12)','var(--bl)','Microsoft Account','Not connected',
-          '<button onclick="loginMsal()" style="background:rgba(16,185,129,.1);border:0;color:#10B981;padding:6px 12px;border-radius:6px;font-size:11px;cursor:pointer;-webkit-appearance:none">Sign In</button>')):
-        _sr(I.user,'rgba(107,114,128,.12)','var(--t3)','Microsoft Account','Pre-configured',''))+
+        _sr(I.user,'rgba(107,114,128,.12)','var(--t3)','Microsoft Account','Sign in to view schedule',''))+
     '</div>'+
     '<div style="height:24px"></div>';
 
@@ -1223,6 +1274,20 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register('sw.js').catch(
   /* Hide loader */
   setTimeout(killLoader, 400);
   _maseel_ready = 2;
+
+  /* Show login screen if not authenticated */
+  if(!AUTH.user){
+    var waitMsal=setInterval(function(){
+      if(AUTH.instance||typeof msal!=='undefined'){
+        clearInterval(waitMsal);
+        var accs=AUTH.instance?AUTH.instance.getAllAccounts():[];
+        if(accs&&accs.length>0){AUTH.user=accs[0];hideLoginScreen();}else{showLoginScreen();}
+      }
+    },200);
+    setTimeout(function(){clearInterval(waitMsal);if(!AUTH.user)showLoginScreen();},5000);
+  }else{
+    hideLoginScreen();
+  }
 
   /* Auto-poll every 5 minutes */
   setInterval(silentRefresh, 300000);
