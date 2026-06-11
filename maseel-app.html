@@ -406,7 +406,15 @@ textarea::placeholder{color:var(--t3)}
   <div class="ld-logo">M</div>
   <div class="ld-title">Maseel Schedule</div>
   <div class="ld-sub" id="ld-msg">Connecting to SharePoint…</div>
-  <div class="ld-bar"><div class="ld-fill" id="ld-fill"></div></div>
+  <div class="ld-bar"><div class="ld-fill" id="ld-fill"></div>  </div>
+</div>
+<div class="frame-ios" id="fios-android">
+  <div class="ios-box">
+    <div class="ios-sico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
+    <div class="ios-txt"><b>Install Maseel App</b><span>Add to your home screen for quick access</span></div>
+    <button class="ios-cl" id="install-btn" style="background:var(--bl1);color:var(--bl);width:auto;padding:0 12px;font-size:12px;font-weight:600;border-radius:7px;font-family:inherit">Install</button>
+    <button class="ios-cl" onclick="closeInstallBanner()">✕</button>
+  </div>
 </div>
 <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none">
 <!-- Safety timer runs before SheetJS CDN (must not block) -->
@@ -475,8 +483,22 @@ var DS = {state:'loading', msg:'Connecting to SharePoint…', ts:'', acts:0, err
 var ST = {
   tab:'today', banner:true, openPh:{}, syncQ:0, syncing:false,
   calSync:true, notif:true, selId:null, shSt:null, shPc:0, calAdded:false,
-  searchQ:'', overrides:{}, _toast:null, _syncT:null
+  searchQ:'', overrides:{}, _toast:null, _syncT:null, dpEvent:null
 };
+
+function saveOverrides(){
+  try{localStorage.setItem('maseel_ovr',JSON.stringify(ST.overrides));}catch(e){}
+}
+function loadOverrides(){
+  try{
+    var d=localStorage.getItem('maseel_ovr');
+    if(d){ST.overrides=JSON.parse(d);}else{ST.overrides={};}
+  }catch(e){ST.overrides={};}
+}
+function clearOverrides(){
+  ST.overrides={};
+  try{localStorage.removeItem('maseel_ovr');}catch(e){}
+}
 
 /* ══════════════════════════════════════════
    AUTH — Office 365 SSO (MSAL, optional)
@@ -557,6 +579,7 @@ function logoutMsal(){
 }
 
 try{loadAuth();initMsal();}catch(e){}
+try{loadOverrides();}catch(e){}
 
 /* ══════════════════════════════════════════
    P6 PARSER  (mirrors the Python extraction logic)
@@ -731,7 +754,7 @@ async function fetchLive() {
 
     PH = parsed.phases;
     AC = parsed.activities;
-    ST.overrides = {}; // clear local overrides when fresh data loaded
+    clearOverrides(); // clear local overrides when fresh data loaded
 
     DS.state='live';
     DS.acts=AC.length;
@@ -1172,7 +1195,7 @@ function addCal(){ST.calAdded=true;var b=document.getElementById('bcal');if(b){b
 function saveSheet(id){
   if(!ST.overrides[id])ST.overrides[id]={};
   ST.overrides[id].st=ST.shSt;ST.overrides[id].pc=ST.shPc;
-  ST.syncQ++;updBadge();closeSheet();
+  saveOverrides();ST.syncQ++;updBadge();closeSheet();
   if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();
   showToast('Saved · Queued for sync');
 }
@@ -1218,7 +1241,7 @@ function cycSt(id){
   var cur=effSt(a),nxt=CYCLE[(CYCLE.indexOf(cur)+1)%CYCLE.length];
   if(!ST.overrides[id])ST.overrides[id]={};
   ST.overrides[id].st=nxt;ST.overrides[id].pc=nxt==='Done'?100:nxt==='Not Started'?0:50;
-  ST.syncQ++;updBadge();
+  saveOverrides();ST.syncQ++;updBadge();
   if(ST.tab==='today')rToday();else rTimeline();
   showToast('→ '+nxt);
 }
@@ -1256,6 +1279,28 @@ function showToast(msg){
   }catch(e){}
 })();
 function closeIOS(){var g=document.getElementById('fios');if(g)g.classList.remove('show');}
+
+/* ── Install Prompt (Android/Chrome) ── */
+(function(){
+  window.addEventListener('beforeinstallprompt',function(e){
+    e.preventDefault();
+    ST.dpEvent=e;
+    var b=document.getElementById('fios-android');
+    if(b)b.classList.add('show');
+  });
+  window.addEventListener('appinstalled',function(){
+    ST.dpEvent=null;
+    closeInstallBanner();
+    showToast('Installed successfully ✓');
+  });
+})();
+function closeInstallBanner(){var b=document.getElementById('fios-android');if(b)b.classList.remove('show');}
+document.addEventListener('click',function(e){
+  if(e.target.id==='install-btn'&&ST.dpEvent){
+    ST.dpEvent.prompt();
+    ST.dpEvent.userChoice.then(function(){ST.dpEvent=null;closeInstallBanner();});
+  }
+});
 
 /* ══════════════════════════════════════════
    INIT — try SharePoint first, fall back to embedded
