@@ -1091,20 +1091,7 @@ function rProfile(){
         '<span style="color:var(--t3)">○ '+ns+' Pending</span>'+
         '<span>'+vAC.length+' of '+AC.length+' total</span>'+(vAC.length!==AC.length?'<span style="color:var(--bl);font-size:10px">filtered</span>':'')+
       '</div>'+
-      (DS.state!=='live'&&!dsLoad?
-        '<div style="margin-top:11px;padding:10px 0 0;border-top:1px solid var(--bd)">'+
-          '<div style="font-size:11px;color:var(--t3);margin-bottom:7px">To get live data:</div>'+
-          '<div style="font-size:11px;color:var(--t2);line-height:1.6">'+
-            '① Open the <a href="'+SP_SHARE_URL+'" target="_blank" style="color:var(--a);text-decoration:none">SharePoint file ↗</a> in this browser to authenticate<br>'+
-            '② Tap Refresh above — the app fetches automatically<br>'+
-            '③ Or download the xlsx and use Upload below'+
-          '</div>'+
-        '</div>':'')+'</div>'+
-
-    '<div class="up-card" onclick="document.getElementById(\'file-input\').click()">'+
-      '<div class="up-inner"><div class="up-ico">'+I.up+'</div>'+
-      '<div class="up-text"><b>Upload P6 Export</b><s>Browse device for updated .xlsx</s></div>'+
-      '</div></div>'+
+      '</div>'+
 
     '<div class="sgrp"><div class="sg-lbl">Project Details</div>'+
       _sr(I.cal,'rgba(245,158,11,.12)','var(--a)','Data Date','3 June 2026 (Update 3)','')+
