@@ -456,6 +456,10 @@ function loadAuth(){
     var p=localStorage.getItem('msal_profile');
     if(p)AUTH._profile=p;
   }catch(e){}
+  /* Pre-configured defaults */
+  if(!AUTH.clientId)AUTH.clientId='1b3e37d8-0ba9-44b2-9033-68e4d8068a87';
+  if(!AUTH.tenantId)AUTH.tenantId='684547e2-bb8b-450a-a3e1-3a6bc15e9471';
+  if(!AUTH._cfg){saveAuthCfg();}
 }
 
 function saveAuthCfg(){
@@ -469,7 +473,8 @@ function initMsal(){
   if(!AUTH.enabled||!AUTH.clientId||!AUTH.tenantId)return;
   if(typeof msal==='undefined')return;
   if(AUTH.instance)return;
-  AUTH.instance=new msal.PublicClientApplication({auth:{clientId:AUTH.clientId,authority:'https://login.microsoftonline.com/'+AUTH.tenantId,redirectUri:window.location.origin+'/'+window.location.pathname.split('/').pop()}});
+  var redirectUri=window.location.origin+window.location.pathname;
+  AUTH.instance=new msal.PublicClientApplication({auth:{clientId:AUTH.clientId,authority:'https://login.microsoftonline.com/'+AUTH.tenantId,redirectUri:redirectUri}});
   AUTH.instance.handleRedirectPromise().then(function(resp){
     if(resp&&!resp.account)return;
     if(resp&&resp.account){AUTH.user=resp.account;AUTH._profile=resp.account.name||resp.account.username||'';try{localStorage.setItem('msal_profile',AUTH._profile);}catch(e){}}
