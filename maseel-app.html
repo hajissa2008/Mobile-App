@@ -300,6 +300,8 @@ textarea{width:100%;background:var(--bg1);border:1px solid var(--bd);border-radi
 textarea:focus{border-color:var(--a)}
 textarea::placeholder{color:var(--t3)}
 .sh-btns{padding:13px 18px 0;display:flex;gap:8px}
+.ph-btn{display:flex;align-items:center;gap:4px;padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;border:1px solid var(--bd);background:var(--bg1);color:var(--t1);-webkit-appearance:none;touch-action:manipulation}
+.ph-thumb{width:100%;max-height:180px;object-fit:cover;border-radius:10px;margin-top:6px;cursor:pointer;border:1px solid var(--bd)}
 .btn-cal{display:flex;align-items:center;gap:5px;padding:11px 12px;border-radius:12px;
   font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit;
   touch-action:manipulation;-webkit-appearance:none;border:none;transition:opacity .2s}
@@ -424,6 +426,7 @@ textarea::placeholder{color:var(--t3)}
   </div>
 </div>
 <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none">
+<input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none">
 <!-- Safety timer runs before SheetJS CDN (must not block) -->
 <script>
 var _maseel_ready=0;
@@ -508,6 +511,41 @@ function loadOverrides(){
 function clearOverrides(){
   ST.overrides={};
   try{localStorage.removeItem('maseel_ovr');}catch(e){}
+}
+function loadPhotos(){try{var d=localStorage.getItem('maseel_photos');return d?JSON.parse(d):{};}catch(e){return {};}}
+function savePhotos(p){try{localStorage.setItem('maseel_photos',JSON.stringify(p));}catch(e){}}
+function getPhoto(id){var p=loadPhotos();return p[id]||null;}
+function storePhoto(id, dataUrl){
+  var p=loadPhotos();p[id]=dataUrl;savePhotos(p);
+}
+function removePhoto(id){var p=loadPhotos();delete p[id];savePhotos(p);}
+function attachPhoto(){
+  var el=document.getElementById('photo-input');
+  if(!el)return;
+  el.onchange=function(e){
+    var file=e.target.files[0];if(!file)return;
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      var img=new Image();
+      img.onload=function(){
+        var max=800,c=document.createElement('canvas'),r=Math.min(max/img.width,max/img.height,1);
+        c.width=img.width*r;c.height=img.height*r;
+        var x=c.getContext('2d');x.drawImage(img,0,0,c.width,c.height);
+        var dataUrl=c.toDataURL('image/jpeg',0.7);
+        if(ST.selId)storePhoto(ST.selId,dataUrl);
+        showToast('✓ Photo attached');
+        rSheet();
+        el.value='';
+      };
+      img.src=ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+  el.click();
+}
+function rSheet(){
+  if(!ST.selId)return;
+  openSheet(ST.selId);
 }
 
 /* ══════════════════════════════════════════
@@ -1316,6 +1354,10 @@ function openSheet(id){
     '</div>'+
     '<div class="sh-sec"><div class="sh-sl">Inspection Notes</div>'+
       '<textarea id="shno" placeholder="Add site notes…">'+escH(a.notes||(ST.overrides[a.id]?ST.overrides[a.id].notes:'')||'')+'</textarea></div>'+
+    '<div class="sh-sec"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'+
+      '<button class="ph-btn" onclick="attachPhoto()">📷 Photo</button>'+
+      (getPhoto(id)?'<span style="font-size:11px;color:var(--gr)">✓ Photo attached</span>':'')+
+    '</div>'+(getPhoto(id)?'<img src="'+getPhoto(id)+'" class="ph-thumb" onclick="showPhoto(this.src)">':'')+'</div>'+
     '<div class="sh-btns">'+
       '<button class="btn-cal idle-cal" id="bcal" onclick="addCal()">'+I.cal+'<span id="bcaltx"> Calendar</span></button>'+
       '<button class="btn-save" onclick="saveSheet(\''+id+'\')">'+I.chkK+' Save Changes</button>'+
@@ -1324,7 +1366,18 @@ function openSheet(id){
   var ov=document.getElementById('fov');if(ov)ov.classList.add('open');
   ST.selId=id;
 }
-function closeSheet(){var ov=document.getElementById('fov');if(ov)ov.classList.remove('open');}
+function closeSheet(){var ov=document.getElementById('fov');if(ov)ov.classList.remove('open');try{var po=document.getElementById('ph-overlay');if(po)po.remove();}catch(e){}}
+function showPhoto(src){
+  var po=document.createElement('div');
+  po.id='ph-overlay';
+  po.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.9);z-index:1000;display:flex;align-items:center;justify-content:center;cursor:pointer';
+  po.onclick=function(){po.remove();};
+  var img=document.createElement('img');
+  img.src=src;
+  img.style.cssText='max-width:95%;max-height:95%;border-radius:12px;object-fit:contain';
+  po.appendChild(img);
+  document.body.appendChild(po);
+}
 function selSt(k,col){
   ST.shSt=k;
   var opts=document.querySelectorAll('.sopt');
@@ -1513,6 +1566,7 @@ async function saveToExcel(id, st, pc, notes, quiet){
 
 async function saveSheet(id){
   var notes=document.getElementById('shno')?document.getElementById('shno').value:'';
+  if(getPhoto(id)&&notes.indexOf('📷')<0)notes='📷 Photo attached\n'+notes;
   if(!ST.overrides[id])ST.overrides[id]={};
   ST.overrides[id].st=ST.shSt;ST.overrides[id].pc=ST.shPc;ST.overrides[id].notes=notes;
   saveOverrides();ST.syncQ++;updBadge();closeSheet();
