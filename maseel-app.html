@@ -600,7 +600,7 @@ function initMsal(){
     /* Check if we were in the middle of something before redirect */
     var pending=sessionStorage.getItem('maseel_pending');
     if(pending){sessionStorage.removeItem('maseel_pending');
-      if(pending==='token'){showToast('✓ Graph permission granted');try{rProfile();}catch(e){}}
+      if(pending==='token'){showToast('✓ Graph permission granted');try{rProfile();}catch(e){}setTimeout(syncAll,500);}
     }
   }).catch(function(){});
   var accounts=AUTH.instance.getAllAccounts();
@@ -1216,6 +1216,7 @@ function rProfile(){
           '<div class="ds-status"><div class="dpulse" style="background:'+(ST.syncQ>0?'var(--a)':'#10B981')+';'+(ST.syncQ>0?'animation:pulse 1.5s infinite':'')+'"></div>'+
           (ST.syncQ>0?ST.syncQ+' pending sync to Excel':'All changes synced ✓')+'</div>'+
         '</div>'+
+        (ST.syncQ>0?'<button style="background:rgba(245,158,11,.12);border:0;color:var(--a);padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap" onclick="syncAll()">Sync All</button>':'')+
         '<button style="background:rgba(59,130,246,.12);border:0;color:var(--bl);padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap" onclick="testGraph()">Test API</button>'+
       '</div></div>'+
 
@@ -1305,6 +1306,24 @@ function selSt(k,col){
 }
 function updPc(v){ST.shPc=+v;var n=document.getElementById('pnum'),f=document.getElementById('ptf');if(n)n.textContent=v+'%';if(f)f.style.width=v+'%';}
 function addCal(){ST.calAdded=true;var b=document.getElementById('bcal');if(b){b.className='btn-cal done-cal';b.innerHTML=I.chkK+'<span> Added!</span>';}showToast('Added to calendar ✓');}
+async function syncAll(){
+  showToast('Syncing all pending changes…');
+  console.log('[sync] syncAll starting, pending:', ST.syncQ);
+  var token = await getGraphToken();
+  if(!token){console.log('[sync] syncAll: no token');return;}
+  var ids = Object.keys(ST.overrides);
+  var synced=0;
+  for(var si=0;si<ids.length;si++){
+    var o = ST.overrides[ids[si]];
+    if(!o)continue;
+    var ok = await saveToExcel(ids[si], o.st||'Not Started', o.pc!=null?o.pc:0, o.notes||'', true);
+    if(ok)synced++;
+    else break;
+  }
+  showToast(synced>0?'✓ Synced '+synced+' of '+ids.length:'Sync stopped');
+  rProfile();
+}
+
 async function testGraph(){
   showToast('Testing Graph API…');
   console.log('[graph] test started');
@@ -1315,12 +1334,12 @@ async function testGraph(){
   showToast('✓ Graph API works ('+buf.byteLength+' bytes)');
 }
 
-async function saveToExcel(id, st, pc, notes){
+async function saveToExcel(id, st, pc, notes, quiet){
   console.log('[sync] saveToExcel called', id, st, pc);
-  showToast('Syncing to Excel…');
+  if(!quiet)showToast('Syncing to Excel…');
   var buf = await fetchViaGraph();
   console.log('[sync] fetchViaGraph result:', !!buf);
-  if(!buf){showToast('Saved locally (Graph unavailable)');return false;}
+  if(!buf){if(!quiet)showToast('Saved locally (Graph unavailable)');return false;}
   try{
     var wb = XLSX.read(new Uint8Array(buf), {type:'array', raw:true, cellDates:false});
     console.log('[sync] workbook sheets:', wb.SheetNames);
