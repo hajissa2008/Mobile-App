@@ -479,7 +479,7 @@ var AC = AC_FALLBACK.slice();
 /* ══════════════════════════════════════════
    STATE
 ══════════════════════════════════════════ */
-var DS = {state:'loading', msg:'Connecting to SharePoint…', ts:'', acts:0, error:''};
+var DS = {state:'loading', msg:'Connecting to SharePoint…', ts:'', acts:0, error:'', syncState:''};
 var ST = {
   tab:'today', banner:true, openPh:{}, syncQ:0, syncing:false,
   calSync:true, notif:true, selId:null, shSt:null, shPc:0, calAdded:false,
@@ -1182,6 +1182,17 @@ function rProfile(){
       '</div>'+
       '</div>'+
 
+    '<div class="ds-card" style="border-left:3px solid '+(ST.syncQ>0?'var(--a)':'var(--gr)')+';margin-top:-6px">'+
+      '<div class="ds-top" style="gap:8px">'+
+        '<div class="ds-ico" style="background:'+(ST.syncQ>0?'rgba(245,158,11,.12)':'rgba(16,185,129,.12)')+';color:'+(ST.syncQ>0?'var(--a)':'#10B981')+'">'+
+          (ST.syncQ>0?I.ref:I.chkW)+'</div>'+
+        '<div class="ds-info"><b>Changes to Sync</b>'+
+          '<div class="ds-status"><div class="dpulse" style="background:'+(ST.syncQ>0?'var(--a)':'#10B981')+';'+(ST.syncQ>0?'animation:pulse 1.5s infinite':'')+'"></div>'+
+          (ST.syncQ>0?ST.syncQ+' pending sync to Excel':'All changes synced ✓')+'</div>'+
+        '</div>'+
+        '<button style="background:rgba(59,130,246,.12);border:0;color:var(--bl);padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap" onclick="testGraph()">Test API</button>'+
+      '</div></div>'+
+
     '<div class="sgrp"><div class="sg-lbl">Project Details</div>'+
       _sr(I.cal,'rgba(245,158,11,.12)','var(--a)','Data Date','3 June 2026 (Update 3)','')+
       _sr(I.zap,'rgba(239,68,68,.12)','#EF4444','Total Float','−49 days behind BL completion','')+
@@ -1268,20 +1279,37 @@ function selSt(k,col){
 }
 function updPc(v){ST.shPc=+v;var n=document.getElementById('pnum'),f=document.getElementById('ptf');if(n)n.textContent=v+'%';if(f)f.style.width=v+'%';}
 function addCal(){ST.calAdded=true;var b=document.getElementById('bcal');if(b){b.className='btn-cal done-cal';b.innerHTML=I.chkK+'<span> Added!</span>';}showToast('Added to calendar ✓');}
+async function testGraph(){
+  showToast('Testing Graph API…');
+  console.log('[graph] test started');
+  var token = await getGraphToken();
+  if(!token){showToast('No token — not signed in or no consent');console.log('[graph] no token');return;}
+  console.log('[graph] token acquired, length:', token.length);
+  var buf = await fetchViaGraph();
+  if(!buf){showToast('Download failed — check console');console.log('[graph] download failed');return;}
+  console.log('[graph] download OK, size:', buf.byteLength);
+  showToast('✓ Graph API works ('+buf.byteLength+' bytes)');
+}
+
 async function saveToExcel(id, st, pc, notes){
+  console.log('[sync] saveToExcel called', id, st, pc);
   showToast('Syncing to Excel…');
   var buf = await fetchViaGraph();
-  if(!buf){showToast('Graph API unavailable — saved locally only');return false;}
+  console.log('[sync] fetchViaGraph result:', !!buf);
+  if(!buf){showToast('Saved locally (Graph unavailable)');return false;}
   try{
     var wb = XLSX.read(new Uint8Array(buf), {type:'array', raw:true, cellDates:false});
+    console.log('[sync] workbook sheets:', wb.SheetNames);
     var sn = 'Maseel Updates';
     var ws = wb.Sheets[sn];
     var rows;
     if(ws){
       rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:''});
+      console.log('[sync] existing sheet rows:', rows.length);
     } else {
       rows = [['Activity ID','Status','Progress','Notes','User','Timestamp']];
       ws = XLSX.utils.aoa_to_sheet(rows);
+      console.log('[sync] creating new Updates sheet');
     }
     var now = new Date().toISOString();
     var user = AUTH.user?AUTH.user.username||AUTH._profile||'unknown':'unknown';
@@ -1289,29 +1317,31 @@ async function saveToExcel(id, st, pc, notes){
     for(var i=1;i<rows.length;i++){
       if(String(rows[i][0]).trim()===id){
         rows[i][1]=st;rows[i][2]=pc;rows[i][3]=notes||rows[i][3]||'';rows[i][4]=user;rows[i][5]=now;
-        found=true;break;
+        found=true;console.log('[sync] updated existing row', i);break;
       }
     }
-    if(!found) rows.push([id,st,pc,notes||'',user,now]);
+    if(!found){rows.push([id,st,pc,notes||'',user,now]);console.log('[sync] appended new row');}
     ws = XLSX.utils.aoa_to_sheet(rows);
     ws['!ref'] = 'A1:F'+rows.length;
     wb.SheetNames = wb.SheetNames.filter(function(n){return n!==sn;});
     wb.SheetNames.push(sn);
     wb.Sheets[sn] = ws;
     var out = XLSX.write(wb, {type:'array', bookType:'xlsx'});
+    console.log('[sync] workbook written, size:', out.byteLength, 'bytes');
     var ok = await uploadViaGraph(out);
-    if(ok){showToast('✓ Synced to Excel');return true;}
+    console.log('[sync] upload result:', ok);
+    if(ok){ST.syncQ=Math.max(0,ST.syncQ-1);updBadge();showToast('✓ Synced to Excel');return true;}
     else{showToast('Upload failed — saved locally');return false;}
-  }catch(e){showToast('Sync error: '+e.message);return false;}
+  }catch(e){console.error('[sync] error:', e);showToast('Sync error: '+e.message);return false;}
 }
 
-function saveSheet(id){
+async function saveSheet(id){
   var notes=document.getElementById('shno')?document.getElementById('shno').value:'';
   if(!ST.overrides[id])ST.overrides[id]={};
   ST.overrides[id].st=ST.shSt;ST.overrides[id].pc=ST.shPc;ST.overrides[id].notes=notes;
   saveOverrides();ST.syncQ++;updBadge();closeSheet();
   if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();
-  saveToExcel(id, ST.shSt, ST.shPc, notes);
+  await saveToExcel(id, ST.shSt, ST.shPc, notes);
 }
 
 /* ══════════════════════════════════════════
@@ -1356,13 +1386,13 @@ function cycSt(id){
   if(!ST.overrides[id])ST.overrides[id]={};
   ST.overrides[id].st=nxt;ST.overrides[id].pc=nxt==='Done'?100:nxt==='Not Started'?0:50;
   saveOverrides();ST.syncQ++;updBadge();
-  if(ST.tab==='today')rToday();else rTimeline();
+  if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();else rProfile();
   showToast('→ '+nxt);
 }
 function dimB(){ST.banner=false;var b=document.getElementById('notif');if(b)b.classList.add('gone');}
 function togPh(id){ST.openPh[id]=!ST.openPh[id];var el=document.getElementById('acc-'+id);if(el)el.classList.toggle('open');}
 function togSt(k){if(k==='cal')ST.calSync=!ST.calSync;else ST.notif=!ST.notif;rProfile();}
-function updBadge(){var b=document.getElementById('sqb');if(!b)return;b.textContent=ST.syncQ;b.style.display=ST.syncQ>0?'block':'none';}
+function updBadge(){var b=document.getElementById('sqb');if(!b)return;b.textContent=ST.syncQ;b.style.display=ST.syncQ>0?'block':'none';if(ST.tab==='profile')rProfile();}
 function showToast(msg){
   var t=document.getElementById('ftoast'),m=document.getElementById('tmsg');
   if(m)m.textContent=msg;if(t)t.classList.add('show');
