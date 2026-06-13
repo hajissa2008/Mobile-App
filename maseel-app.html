@@ -533,14 +533,14 @@ async function getGraphToken(){
   if(!AUTH.instance||!AUTH.user)return null;
   if(AUTH.graphToken&&Date.now()<AUTH.graphTokenExp)return AUTH.graphToken;
   try{
-    var resp = await AUTH.instance.acquireTokenSilent({scopes:[GRAPH_SCOPE,MAIL_SCOPE],account:AUTH.user});
+    var resp = await AUTH.instance.acquireTokenSilent({scopes:[GRAPH_SCOPE],account:AUTH.user});
     AUTH.graphToken = resp.accessToken;
     AUTH.graphTokenExp = Date.now() + (resp.expiresOn?resp.expiresOn.getTime()-Date.now():3000000);
     return AUTH.graphToken;
   }catch(e){
     console.log('[graph] silent failed, redirecting for consent');
     sessionStorage.setItem('maseel_pending','token');
-    AUTH.instance.acquireTokenRedirect({scopes:[GRAPH_SCOPE,MAIL_SCOPE],account:AUTH.user});
+    AUTH.instance.acquireTokenRedirect({scopes:[GRAPH_SCOPE],account:AUTH.user});
     return null;
   }
 }
@@ -651,7 +651,7 @@ function loginMsal(){
   if(!AUTH.instance)return;
   var btn=document.getElementById('ls-btn');
   if(btn){btn.disabled=true;btn.innerHTML='Signing in…';}
-  AUTH.instance.loginRedirect({scopes:['User.Read','openid','profile',GRAPH_SCOPE,MAIL_SCOPE]});
+  AUTH.instance.loginRedirect({scopes:['User.Read','openid','profile',GRAPH_SCOPE]});
 }
 
 function logoutMsal(){
@@ -1354,13 +1354,14 @@ async function uploadViaGraphRetry(buf,retries){
   return false;
 }
 async function sendInspectionEmail(id, title){
+  if(!AUTH.instance||!AUTH.user)return;
   try{
     var resp = await AUTH.instance.acquireTokenSilent({scopes:[MAIL_SCOPE],account:AUTH.user});
     var token = resp.accessToken;
     var msg = {
       message:{
-        subject:'🔍 Task Ready for Inspection: '+id,
-        body:{contentType:'Text', content:'Task "'+title+'" ('+id+') has been marked as "For Inspection".\n\nPlease review and update the status.\n\n— Maseel Schedule App'},
+        subject:'Maseel - Task Ready for Inspection: '+id,
+        body:{contentType:'Text', content:'Task "'+title+'" ('+id+') has been marked as "For Inspection".\n\nPlease review in the Maseel Schedule app.\n\n— Maseel App'},
         toRecipients:[{emailAddress:{address:NOTIFY_EMAIL}}]
       },
       saveToSentItems:true
@@ -1370,11 +1371,12 @@ async function sendInspectionEmail(id, title){
       headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
       body:JSON.stringify(msg)
     });
-    if(res.ok)console.log('[email] notification sent to', NOTIFY_EMAIL);
-    else console.log('[email] send failed:', res.status);
+    if(res.ok)showToast('✓ Email notification sent');
+    else showToast('Email notification failed ('+res.status+')');
   }catch(e){
-    if(e.message&&e.message.indexOf('consent')>=0)console.log('[email] need Mail.Send consent');
-    else console.log('[email] error:', e);
+    if(e.message&&e.message.indexOf('consent')>=0)showToast('Need Mail.Send permission — log out & back in');
+    else showToast('Email error');
+    console.log('[email]', e);
   }
 }
 
@@ -1487,7 +1489,7 @@ async function saveToExcel(id, st, pc, notes, quiet){
         if(cSt>=0)rows[i][cSt]=st;
         if(cNote>=0)rows[i][cNote]=notes||rows[i][cNote]||'';
         if(cTs>=0)rows[i][cTs]=now;
-          if(st==='For Inspection'){
+        if(st==='For Inspection'){
           var cur=rows[i][8]?String(rows[i][8]).trim():'';
           if(cur.toLowerCase().indexOf(INSPECT_EMAIL)<0)
             rows[i][8]=cur?cur+', '+INSPECT_EMAIL:INSPECT_EMAIL;
