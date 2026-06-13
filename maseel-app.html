@@ -127,6 +127,7 @@ body{height:100%;overflow:hidden;overscroll-behavior:none;
   -webkit-appearance:none;background:transparent;cursor:pointer;transition:all .15s}
 .ci-ip{border-color:#3B82F6!important;background:rgba(59,130,246,.12)!important}
 .ci-dn{border-color:#10B981!important;background:#10B981!important}
+.ci-pi{border-color:#F59E0B!important;background:rgba(245,158,11,.12)!important}
 .ci-bk{border-color:#EF4444!important;background:rgba(239,68,68,.12)!important}
 .ci-fi{border-color:#F87171!important;background:rgba(248,113,113,.12)!important}
 .cinfo{flex:1;min-width:0}
@@ -138,6 +139,7 @@ body{height:100%;overflow:hidden;overscroll-behavior:none;
 .b-ip{background:rgba(59,130,246,.12);color:#60A5FA;border:1px solid rgba(59,130,246,.2)}
 .b-dn{background:rgba(16,185,129,.12);color:#34D399;border:1px solid rgba(16,185,129,.2)}
 .b-fi{background:rgba(248,113,113,.12);color:#F87171;border:1px solid rgba(248,113,113,.2)}
+.b-pi{background:rgba(245,158,11,.12);color:#F59E0B;border:1px solid rgba(245,158,11,.2)}
 .b-dt{background:rgba(255,255,255,.06);color:var(--t2)}
 .b-td{background:rgba(245,158,11,.1);color:var(--a);border:1px solid rgba(245,158,11,.2)}
 .b-ov{background:rgba(239,68,68,.1);color:#F87171;border:1px solid rgba(239,68,68,.2)}
@@ -276,6 +278,7 @@ body{height:100%;overflow:hidden;overscroll-behavior:none;
 .sopt.s-ip{border-color:#3B82F6;background:rgba(59,130,246,.12)}
 .sopt.s-dn{border-color:#10B981;background:rgba(16,185,129,.12)}
 .sopt.s-fi{border-color:#F87171;background:rgba(248,113,113,.12)}
+.sopt.s-pi{border-color:#F59E0B;background:rgba(245,158,11,.12)}
 .so-radio{width:16px;height:16px;border-radius:50%;border:2px solid var(--bd2);
   display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .so-lbl{font-size:13px;font-weight:500}
@@ -283,6 +286,7 @@ body{height:100%;overflow:hidden;overscroll-behavior:none;
 .sopt.s-ip .so-lbl{color:#60A5FA}.sopt.s-ip .so-radio{border-color:#3B82F6}
 .sopt.s-dn .so-lbl{color:#34D399}.sopt.s-dn .so-radio{border-color:#10B981}
 .sopt.s-fi .so-lbl{color:#F87171}.sopt.s-fi .so-radio{border-color:#F87171}
+.sopt.s-pi .so-lbl{color:#F59E0B}.sopt.s-pi .so-radio{border-color:#F59E0B}
 .pct-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
 .pct-num{font-family:var(--FD);font-size:20px;font-weight:800;color:#3B82F6}
 input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:28px;
@@ -521,10 +525,11 @@ function addIns(id,qty,result){
   if(!ST.overrides[id].ins)ST.overrides[id].ins=[];
   ST.overrides[id].ins.push({q:qty,r:result,d:new Date().toISOString()});
   saveOverrides();
-  if(readyQty(id)&&remQty(id)<=0){
-    ST.overrides[id].st='Done';ST.overrides[id].pc=100;
+  var a=acOf(id),tot=a?a.totalQty:0,ins=inspQty(id);
+  if(tot>0&&ins>0){
+    if(ins>=tot){ST.overrides[id].st='Done';ST.overrides[id].pc=100;showToast('✓ All quantity inspected — status set to Done');}
+    else{ST.overrides[id].st='Partially Inspected';ST.overrides[id].pc=Math.round(ins/tot*100);showToast('! Partially inspected — status updated');}
     saveOverrides();
-    showToast('✓ All quantity inspected — status set to Done');
   }
 }
 function loadPhotos(){try{var d=localStorage.getItem('maseel_photos');return d?JSON.parse(d):{};}catch(e){return {};}}
@@ -963,7 +968,7 @@ var MO=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 function fd(d){if(!d)return'—';var p=d.split('-');return MO[+p[1]-1]+' '+(+p[2]);}
 function phOf(id){for(var i=0;i<PH.length;i++)if(PH[i].id===id)return PH[i];return null;}
 function acOf(id){for(var i=0;i<AC.length;i++)if(AC[i].id===id)return AC[i];return null;}
-function sk(s){return s==='Not Started'?'ns':s==='In Progress'?'ip':s==='Done'?'dn':'fi';}
+function sk(s){return s==='Not Started'?'ns':s==='In Progress'?'ip':s==='Done'?'dn':s==='Partially Inspected'?'pi':'fi';}
 function eff(a){return(ST.overrides[a.id]||{});}
 function effSt(a){return eff(a).st||a.st;}
 function effPc(a){var o=eff(a);return o.pc!=null?o.pc:a.pc;}
@@ -1048,12 +1053,13 @@ function rToday(){
   for(var i=0;i<vAC.length;i++){
     var a=vAC[i];var st=effSt(a);
     var isActive=a.s<=DATA_DATE&&a.f>=DATA_DATE;
-    var isOverdue=a.f<DATA_DATE&&st!=='Done'&&st!=='For Inspection';
+    var isOverdue=a.f<DATA_DATE&&st!=='Done'&&st!=='For Inspection'&&st!=='Partially Inspected';
     if(tf){
       if(tf==='Not Started'&&!(isActive&&st==='Not Started'))continue;
       else if(tf==='Overdue'&&!isOverdue)continue;
       else if(tf==='In Progress'&&!(isActive&&st==='In Progress'&&!isOverdue))continue;
       else if(tf==='For Inspection'&&st!=='For Inspection')continue;
+      else if(tf==='Partially Inspected'&&st!=='Partially Inspected')continue;
       else if(tf==='Done'&&st!=='Done')continue;
     }else{
       if(st==='Done')continue;
@@ -1082,18 +1088,20 @@ function rToday(){
       '<button class="n-x" onclick="event.stopPropagation();dimB()">'+I.x+'</button></div>';
   }
   /* KPI counts from all visible activities */
-  var kNs=0,kOv=0,kIp=0,kFi=0,kDn=0;
-  for(var i=0;i<vAC.length;i++){var a=vAC[i],s=effSt(a),isActive=a.s<=DATA_DATE&&a.f>=DATA_DATE,isOverdue=a.f<DATA_DATE&&s!=='Done'&&s!=='For Inspection';
+  var kNs=0,kOv=0,kIp=0,kFi=0,kPi=0,kDn=0;
+  for(var i=0;i<vAC.length;i++){var a=vAC[i],s=effSt(a),isActive=a.s<=DATA_DATE&&a.f>=DATA_DATE,isOverdue=a.f<DATA_DATE&&s!=='Done'&&s!=='For Inspection'&&s!=='Partially Inspected';
     if(isActive&&s==='Not Started')kNs++;
     if(isOverdue)kOv++;
     if(isActive&&s==='In Progress'&&!isOverdue)kIp++;
     if(s==='For Inspection')kFi++;
+    if(s==='Partially Inspected')kPi++;
     if(s==='Done')kDn++;}
   var kpis=[
     {k:'Not Started',c:'#9CA3AF',v:kNs},
     {k:'Overdue',c:'#EF4444',v:kOv},
     {k:'In Progress',c:'#60A5FA',v:kIp},
     {k:'For Inspection',c:'#F87171',v:kFi},
+    {k:'Partially Inspected',c:'#F59E0B',v:kPi},
     {k:'Done',c:'#34D399',v:kDn}
   ];
   h+='<div class="kpis">';
@@ -1129,7 +1137,7 @@ function buildCard(a){
   return'<div class="card'+(st==='Done'?' fade-c':'')+'" onclick="openSheet(\''+a.id+'\')" style="border-left:none">'+
     '<div class="stripe" style="background:'+c+'"></div>'+
     '<div class="crow">'+
-      '<div class="circ ci-'+k+'" style="border-color:'+(k==='dn'?'#10B981':k==='ip'?'#3B82F6':k==='fi'?'#F87171':'rgba(255,255,255,.13)')+'" onclick="event.stopPropagation();cycSt(\''+a.id+'\')">'+circInner(st)+'</div>'+
+      '<div class="circ ci-'+k+'" style="border-color:'+(k==='dn'?'#10B981':k==='pi'?'#F59E0B':k==='ip'?'#3B82F6':k==='fi'?'#F87171':'rgba(255,255,255,.13)')+'" onclick="event.stopPropagation();cycSt(\''+a.id+'\')">'+circInner(st)+'</div>'+
       '<div class="cinfo">'+
         '<div class="ctit">'+escH(a.title)+'</div>'+
         (a.disc?'<div class="cdisc">'+escH(a.disc)+'</div>':'')+
@@ -1329,7 +1337,7 @@ function openSheet(id){
   var st=effSt(a),pc=effPc(a);
   ST.shSt=st;ST.shPc=pc;ST.calAdded=false;
   var opts=[{k:'Not Started',cls:'s-ns',col:'#9CA3AF'},{k:'In Progress',cls:'s-ip',col:'#60A5FA'},
-            {k:'For Inspection',cls:'s-fi',col:'#F87171'},{k:'Done',cls:'s-dn',col:'#34D399'}];
+            {k:'For Inspection',cls:'s-fi',col:'#F87171'},{k:'Partially Inspected',cls:'s-pi',col:'#F59E0B'},{k:'Done',cls:'s-dn',col:'#34D399'}];
   var h='<div class="sh-handle"></div>'+
     '<div class="sh-hd">'+
       '<div style="display:flex;align-items:center;justify-content:space-between">'+
@@ -1374,7 +1382,7 @@ function closeSheet(){var ov=document.getElementById('fov');if(ov)ov.classList.r
 function selSt(k,col){
   ST.shSt=k;
   var opts=document.querySelectorAll('.sopt');
-  var keys=['Not Started','In Progress','For Inspection','Done'],clss=['s-ns','s-ip','s-fi','s-dn'],cols=['#9CA3AF','#60A5FA','#F87171','#34D399'];
+  var keys=['Not Started','In Progress','For Inspection','Partially Inspected','Done'],clss=['s-ns','s-ip','s-fi','s-pi','s-dn'],cols=['#9CA3AF','#60A5FA','#F87171','#F59E0B','#34D399'];
   for(var i=0;i<opts.length;i++){
     opts[i].className='sopt'+(keys[i]===k?' '+clss[i]:'');
     var r=opts[i].querySelector('.so-radio');
@@ -1442,13 +1450,12 @@ function updateReadyQty(id){
   if(!ST.overrides[id])ST.overrides[id]={};
   ST.overrides[id].readyQty=v;
   saveOverrides();
-  if(v>0&&remQty(id)<=0){
-    ST.overrides[id].st='Done';ST.overrides[id].pc=100;
+  var a=acOf(id),tot=a?a.totalQty:0,ins=inspQty(id);
+  if(tot>0&&ins>0){
+    if(ins>=tot){ST.overrides[id].st='Done';ST.overrides[id].pc=100;showToast('✓ All quantity inspected — status set to Done');}
+    else{ST.overrides[id].st='Partially Inspected';ST.overrides[id].pc=Math.round(ins/tot*100);showToast('! Partially inspected — status updated');}
     saveOverrides();
-    showToast('✓ All quantity inspected — status set to Done');
-  }else{
-    showToast('✓ Ready quantity set to '+v);
-  }
+  }else{showToast('✓ Ready quantity set to '+v);}
   openSheet(id);
   if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();
 }
@@ -1693,7 +1700,7 @@ function go(t){
   document.getElementById('s-'+t).classList.add('active');
   if(t==='today')rToday();else if(t==='timeline')rTimeline();else rProfile();
 }
-var CYCLE=['Not Started','In Progress','For Inspection','Done'];
+var CYCLE=['Not Started','In Progress','For Inspection','Partially Inspected','Done'];
 function cycSt(id){
   var a=acOf(id);if(!a)return;
   var cur=effSt(a),nxt=CYCLE[(CYCLE.indexOf(cur)+1)%CYCLE.length];
