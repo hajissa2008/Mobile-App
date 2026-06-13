@@ -503,7 +503,63 @@ function clearOverrides(){
 /* ══════════════════════════════════════════
    AUTH — Office 365 SSO (MSAL, optional)
 ══════════════════════════════════════════ */
-var AUTH = {enabled:false, clientId:'', tenantId:'', user:null, instance:null, _profile:'', _cfg:null};
+var AUTH = {enabled:false, clientId:'', tenantId:'', user:null, instance:null, _profile:'', _cfg:null, graphToken:null, graphTokenExp:0};
+var GRAPH_SCOPE = 'https://graph.microsoft.com/Files.ReadWrite.All';
+var GRAPH_SHARE_BASE = 'https://graph.microsoft.com/v1.0/shares/';
+
+function shareUrlToEncoded(url){
+  var u = url.split('?')[0];
+  var bytes = new TextEncoder().encode(u);
+  var binary = '';
+  for(var i=0;i<bytes.length;i++) binary += String.fromCharCode(bytes[i]);
+  var b = btoa(binary).replace(/=+$/,'').replace(/\+/g,'-').replace(/\//g,'_');
+  return 'u!' + b;
+}
+
+async function getGraphToken(){
+  if(!AUTH.instance||!AUTH.user)return null;
+  if(AUTH.graphToken&&Date.now()<AUTH.graphTokenExp)return AUTH.graphToken;
+  try{
+    var resp = await AUTH.instance.acquireTokenSilent({scopes:[GRAPH_SCOPE],account:AUTH.user});
+    AUTH.graphToken = resp.accessToken;
+    AUTH.graphTokenExp = Date.now() + (resp.expiresOn?resp.expiresOn.getTime()-Date.now():3000000);
+    return AUTH.graphToken;
+  }catch(e){
+    try{
+      var resp = await AUTH.instance.acquireTokenPopup({scopes:[GRAPH_SCOPE],account:AUTH.user});
+      AUTH.graphToken = resp.accessToken;
+      AUTH.graphTokenExp = Date.now() + (resp.expiresOn?resp.expiresOn.getTime()-Date.now():3000000);
+      return AUTH.graphToken;
+    }catch(e2){return null;}
+  }
+}
+
+async function fetchViaGraph(){
+  var token = await getGraphToken();
+  if(!token)return null;
+  var encoded = shareUrlToEncoded(SP_SHARE_URL);
+  var url = GRAPH_SHARE_BASE + encoded + '/driveItem/content';
+  try{
+    var res = await fetch(url, {headers:{'Authorization':'Bearer '+token}});
+    if(!res.ok)return null;
+    return await res.arrayBuffer();
+  }catch(e){return null;}
+}
+
+async function uploadViaGraph(buf){
+  var token = await getGraphToken();
+  if(!token)return false;
+  var encoded = shareUrlToEncoded(SP_SHARE_URL);
+  var url = GRAPH_SHARE_BASE + encoded + '/driveItem/content';
+  try{
+    var res = await fetch(url, {
+      method:'PUT',
+      headers:{'Authorization':'Bearer '+token, 'Content-Type':'application/octet-stream'},
+      body:buf
+    });
+    return res.ok;
+  }catch(e){return false;}
+}
 
 function loadAuth(){
   try{
@@ -558,7 +614,7 @@ function loginMsal(){
   if(!AUTH.instance)return;
   var btn=document.getElementById('ls-btn');
   if(btn){btn.disabled=true;btn.innerHTML='Signing in…';}
-  var loginRequest={scopes:['User.Read','openid','profile']};
+  var loginRequest={scopes:['User.Read','openid','profile',GRAPH_SCOPE]};
   AUTH.instance.loginPopup(loginRequest).then(function(resp){
     AUTH.user=resp.account;
     AUTH._profile=resp.account.name||resp.account.username||'';
@@ -631,7 +687,8 @@ function isActual(v) { return typeof v==='string' && /\s*A$/.test(v.trim()); }
 function parseP6Buffer(buffer) {
   if (typeof XLSX === 'undefined') throw new Error('SheetJS not loaded');
   var wb = XLSX.read(new Uint8Array(buffer), {type:'array', raw:true, cellDates:false});
-  var ws = wb.Sheets[wb.SheetNames[0]];
+  var sn = wb.SheetNames;
+  var ws = wb.Sheets[sn[0]];
   var rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:null});
   if (rows.length < 2) throw new Error('Empty sheet');
 
@@ -711,7 +768,31 @@ function parseP6Buffer(buffer) {
     });
     for (var ai=0; ai<acts.length; ai++) activities.push(acts[ai]);
   }
-  return {phases:phases, activities:activities};
+
+  /* Apply Maseel Updates sheet (if present) */
+  var updatesSheet = wb.Sheets['Maseel Updates'];
+  if(updatesSheet){
+    var upRows = XLSX.utils.sheet_to_json(updatesSheet, {header:1, raw:true, defval:''});
+    if(upRows.length>1){
+      var upMap = {};
+      for(var ui=1;ui<upRows.length;ui++){
+        var r=upRows[ui];
+        if(!r[0])continue;
+        var aid=String(r[0]).trim();
+        if(!upMap[aid]||r[5]>upMap[aid][5])upMap[aid]=r;
+      }
+      for(var ai=0;ai<activities.length;ai++){
+        var up=upMap[activities[ai].id];
+        if(up){
+          if(up[1])activities[ai].st=up[1];
+          if(up[2]!=null&&up[2]!=='')activities[ai].pc=parseInt(up[2]);
+          if(up[3])activities[ai].notes=up[3];
+        }
+      }
+    }
+  }
+
+  return {phases:phases, activities:activities, workbook:wb};
 }
 
 /* ══════════════════════════════════════════
@@ -731,15 +812,22 @@ async function fetchLive() {
     var tid = controller ? setTimeout(function(){controller.abort();}, 12000) : null;
 
     setLoadMsg('Downloading schedule file…', 40);
-    var res, source='';
-    try {
-      res = await fetch(GH_DL_URL, {signal: controller ? controller.signal : undefined});
-      if (res.ok) source = 'GitHub';
-    } catch(e){}
-    if (!source) {
+    var buf, source='';
+    /* Try Graph API first (requires MSAL + Files.ReadWrite.All) */
+    if(AUTH.user){
+      var gBuf = await fetchViaGraph();
+      if(gBuf){buf=gBuf;source='Graph API';}
+    }
+    if(!source){
       try {
-        res = await fetch(SP_DL_URL, {credentials:'include', signal: controller ? controller.signal : undefined});
-        if (res.ok) source = 'SharePoint';
+        var res = await fetch(GH_DL_URL, {signal: controller ? controller.signal : undefined});
+        if(res.ok){buf=await res.arrayBuffer();source='GitHub';}
+      } catch(e){}
+    }
+    if(!source){
+      try {
+        var res = await fetch(SP_DL_URL, {credentials:'include', signal: controller ? controller.signal : undefined});
+        if(res.ok){buf=await res.arrayBuffer();source='SharePoint';}
       } catch(e2){}
     }
     if (tid) clearTimeout(tid);
@@ -747,7 +835,6 @@ async function fetchLive() {
 
     setLoadMsg('Parsing P6 data…', 70);
 
-    var buf = await res.arrayBuffer();
     var parsed = parseP6Buffer(buf);
 
     if (!parsed.activities.length) throw new Error('No activities found in file');
@@ -1159,7 +1246,7 @@ function openSheet(id){
       '<div class="ptrack"><div class="pfill-sh" id="ptf" style="width:'+pc+'%;background:'+c+'"></div></div>'+
     '</div>'+
     '<div class="sh-sec"><div class="sh-sl">Inspection Notes</div>'+
-      '<textarea id="shno" placeholder="Add site notes…"></textarea></div>'+
+      '<textarea id="shno" placeholder="Add site notes…">'+escH(a.notes||(ST.overrides[a.id]?ST.overrides[a.id].notes:'')||'')+'</textarea></div>'+
     '<div class="sh-btns">'+
       '<button class="btn-cal idle-cal" id="bcal" onclick="addCal()">'+I.cal+'<span id="bcaltx"> Calendar</span></button>'+
       '<button class="btn-save" onclick="saveSheet(\''+id+'\')">'+I.chkK+' Save Changes</button>'+
@@ -1181,12 +1268,50 @@ function selSt(k,col){
 }
 function updPc(v){ST.shPc=+v;var n=document.getElementById('pnum'),f=document.getElementById('ptf');if(n)n.textContent=v+'%';if(f)f.style.width=v+'%';}
 function addCal(){ST.calAdded=true;var b=document.getElementById('bcal');if(b){b.className='btn-cal done-cal';b.innerHTML=I.chkK+'<span> Added!</span>';}showToast('Added to calendar ✓');}
+async function saveToExcel(id, st, pc, notes){
+  showToast('Syncing to Excel…');
+  var buf = await fetchViaGraph();
+  if(!buf){showToast('Graph API unavailable — saved locally only');return false;}
+  try{
+    var wb = XLSX.read(new Uint8Array(buf), {type:'array', raw:true, cellDates:false});
+    var sn = 'Maseel Updates';
+    var ws = wb.Sheets[sn];
+    var rows;
+    if(ws){
+      rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:''});
+    } else {
+      rows = [['Activity ID','Status','Progress','Notes','User','Timestamp']];
+      ws = XLSX.utils.aoa_to_sheet(rows);
+    }
+    var now = new Date().toISOString();
+    var user = AUTH.user?AUTH.user.username||AUTH._profile||'unknown':'unknown';
+    var found = false;
+    for(var i=1;i<rows.length;i++){
+      if(String(rows[i][0]).trim()===id){
+        rows[i][1]=st;rows[i][2]=pc;rows[i][3]=notes||rows[i][3]||'';rows[i][4]=user;rows[i][5]=now;
+        found=true;break;
+      }
+    }
+    if(!found) rows.push([id,st,pc,notes||'',user,now]);
+    ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!ref'] = 'A1:F'+rows.length;
+    wb.SheetNames = wb.SheetNames.filter(function(n){return n!==sn;});
+    wb.SheetNames.push(sn);
+    wb.Sheets[sn] = ws;
+    var out = XLSX.write(wb, {type:'array', bookType:'xlsx'});
+    var ok = await uploadViaGraph(out);
+    if(ok){showToast('✓ Synced to Excel');return true;}
+    else{showToast('Upload failed — saved locally');return false;}
+  }catch(e){showToast('Sync error: '+e.message);return false;}
+}
+
 function saveSheet(id){
+  var notes=document.getElementById('shno')?document.getElementById('shno').value:'';
   if(!ST.overrides[id])ST.overrides[id]={};
-  ST.overrides[id].st=ST.shSt;ST.overrides[id].pc=ST.shPc;
+  ST.overrides[id].st=ST.shSt;ST.overrides[id].pc=ST.shPc;ST.overrides[id].notes=notes;
   saveOverrides();ST.syncQ++;updBadge();closeSheet();
   if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();
-  showToast('Saved · Queued for sync');
+  saveToExcel(id, ST.shSt, ST.shPc, notes);
 }
 
 /* ══════════════════════════════════════════
