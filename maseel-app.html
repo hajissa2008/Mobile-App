@@ -1003,7 +1003,7 @@ function visibleAC(){
   var e=AUTH.user.username.toLowerCase();
   console.log('[perm] logged in as:', e);
   console.log('[perm] sample activity:', AC[0]||'none');
-  var r=AC.filter(function(a){return!a.responsible||a.responsible===e;});
+  var r=AC.filter(function(a){return!a.responsible||a.responsible.split(',').map(function(x){return x.trim().toLowerCase();}).indexOf(e)>=0;});
   console.log('[perm] visible:', r.length, 'of', AC.length);
   return r;
 }
