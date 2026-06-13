@@ -514,14 +514,14 @@ function clearOverrides(){
   try{localStorage.removeItem('maseel_ovr');}catch(e){}
 }
 function inspQty(id){var o=ST.overrides[id];if(!o||!o.ins)return 0;return o.ins.filter(function(x){return x.r==='Passed';}).reduce(function(s,x){return s+x.q;},0);}
-function remQty(a){if(!a||!a.totalQty)return 0;return Math.max(0,a.totalQty-inspQty(a.id));}
+function effTq(id){var o=ST.overrides[id];if(o&&o.totalQty!=null)return o.totalQty;var a=acOf(id);return a?a.totalQty:null;}
+function remQty(id){var tq=effTq(id);if(!tq)return 0;return Math.max(0,tq-inspQty(id));}
 function addIns(id,qty,result){
   if(!ST.overrides[id])ST.overrides[id]={};
   if(!ST.overrides[id].ins)ST.overrides[id].ins=[];
   ST.overrides[id].ins.push({q:qty,r:result,d:new Date().toISOString()});
   saveOverrides();
-  var a=acOf(id);
-  if(a&&a.totalQty&&remQty(a)<=0){
+  if(effTq(id)&&remQty(id)<=0){
     ST.overrides[id].st='Done';ST.overrides[id].pc=100;
     saveOverrides();
     showToast('✓ All quantity inspected — status set to Done');
@@ -993,7 +993,7 @@ var I={
 function stB(s){var k=sk(s);return'<span class="b b-'+k+'">'+s+'</span>';}
 function dtB(d){if(!d)return'';if(d===DATA_DATE)return'<span class="b b-td">Due Today</span>';if(d<DATA_DATE)return'<span class="b b-ov">Overdue</span>';return'<span class="b b-dt">'+fd(d)+'</span>';}
 function flB(f){if(f==null)return'';if(f<0)return'<span class="b b-ov">Overdue</span>';var c=f<5?'b-td':'b-c';return'<span class="b '+c+'">Float '+f+'d</span>';}
-function qtyB(a){var ins=inspQty(a.id),rm=remQty(a);return'<span class="b b-c">'+ins+'/'+a.totalQty+' '+a.unit+'</span>'+((rm>0&&ins>0)?'<span class="b b-td">'+rm+' left</span>':'');}
+function qtyB(a){var ins=inspQty(a.id),tq=effTq(a.id),rm=remQty(a.id);return'<span class="b b-c">'+ins+'/'+(tq||0)+' '+a.unit+'</span>'+((rm>0&&ins>0)?'<span class="b b-td">'+rm+' left</span>':'');}
 function circInner(s){if(s==='Done')return I.chkW;if(s==='In Progress')return I.dot7;return'';}
 function escH(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
@@ -1384,16 +1384,23 @@ function selSt(k,col){
 function updPc(v){ST.shPc=+v;var n=document.getElementById('pnum'),f=document.getElementById('ptf');if(n)n.textContent=v+'%';if(f)f.style.width=v+'%';}
 function addCal(){ST.calAdded=true;var b=document.getElementById('bcal');if(b){b.className='btn-cal done-cal';b.innerHTML=I.chkK+'<span> Added!</span>';}showToast('Added to calendar ✓');}
 function inspSection(a,id){
-  var ins=inspQty(id),rm=remQty(a);
+  var ins=inspQty(id),tq=effTq(id),rm=remQty(id);
   var stNow=ST.shSt||a.st;
   var h='<div class="sh-sec"><div class="sh-sl" style="margin-bottom:4px">Inspection Quantity</div>'+
     '<div style="display:flex;gap:6px;font-size:12px;margin-bottom:6px">'+
-    '<span class="mchip">Total: <b>'+a.totalQty+'</b> '+(a.unit||'')+'</span>'+
+    '<span class="mchip">Total: <b id="itqdisp">'+(tq||0)+'</b> '+(a.unit||'')+'</span>'+
     '<span class="mchip">Inspected: <b>'+ins+'</b></span>'+
-    (rm>0?'<span class="mchip" style="color:var(--a)">Remaining: <b>'+rm+'</b></span>':'<span class="mchip" style="color:var(--gr)">✓ Complete</span>')+
+    (rm>0?'<span class="mchip" style="color:var(--a)">Remaining: <b id="iremdisp">'+rm+'</b></span>':'<span class="mchip" style="color:var(--gr)">✓ Complete</span>')+
+    '</div>'+
+    '<div style="margin-top:4px">'+
+      '<label style="font-size:10px;color:var(--t3);display:block;margin-bottom:2px">Edit Total Quantity</label>'+
+      '<div style="display:flex;gap:6px;align-items:center">'+
+        '<input id="itqinp" type="number" min="1" value="'+(tq||0)+'" style="width:80px;padding:6px 8px;border-radius:6px;border:1px solid var(--br);background:var(--bg2);color:var(--t1);font-size:13px;height:34px;box-sizing:border-box" onfocus="this.select()">'+
+        '<button class="ph-btn" onclick="updateTotalQty(\''+id+'\')" style="background:var(--a);border:none;color:#fff">Update</button>'+
+      '</div>'+
     '</div>';
   if(stNow==='For Inspection'&&rm>0){
-    h+='<div style="display:flex;gap:6px;align-items:center;margin-top:2px">'+
+    h+='<div style="display:flex;gap:6px;align-items:center;margin-top:8px">'+
       '<input id="inqty" type="number" min="1" max="'+rm+'" value="'+Math.min(rm,1)+'" style="width:60px;padding:6px 8px;border-radius:6px;border:1px solid var(--br);background:var(--bg2);color:var(--t1);font-size:13px;height:34px;box-sizing:border-box" onfocus="this.select()">'+
       '<button class="ph-btn" style="background:var(--gr);border:none;color:#fff;flex:1" onclick="recordIns(\''+id+'\',\'Passed\')">✓ Passed</button>'+
       '<button class="ph-btn" style="background:#EF4444;border:none;color:#fff;flex:1" onclick="recordIns(\''+id+'\',\'Failed\')">✗ Failed</button>'+
@@ -1464,9 +1471,27 @@ function recordIns(id,result){
   if(!q||q<1){showToast('Enter a valid quantity');return;}
   var a=acOf(id);
   if(!a)return;
-  if(remQty(a)<q){showToast('Cannot inspect more than remaining qty');return;}
+  if(remQty(id)<q){showToast('Cannot inspect more than remaining qty');return;}
   addIns(id,q,result);
   showToast('✓ '+q+' '+(a.unit||'units')+' inspected ('+result+')');
+  openSheet(id);
+  if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();
+}
+function updateTotalQty(id){
+  var inp=document.getElementById('itqinp');
+  if(!inp)return;
+  var v=parseInt(inp.value);
+  if(!v||v<1){showToast('Enter a valid total quantity');return;}
+  if(!ST.overrides[id])ST.overrides[id]={};
+  ST.overrides[id].totalQty=v;
+  saveOverrides();
+  if(remQty(id)<=0){
+    ST.overrides[id].st='Done';ST.overrides[id].pc=100;
+    saveOverrides();
+    showToast('✓ Total qty updated — status set to Done');
+  }else{
+    showToast('✓ Total qty updated to '+v);
+  }
   openSheet(id);
   if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();
 }
@@ -1487,7 +1512,7 @@ async function syncAll(){
     var ws = wb.Sheets[sn];
     var rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:''});
     if(rows.length<2)return;
-    var cPc=-1,cSt=-1,cNote=-1,cTs=-1,cInsQ=-1,cRemQ=-1;
+    var cPc=-1,cSt=-1,cNote=-1,cTs=-1,cInsQ=-1,cRemQ=-1,cTq=-1;
     if(rows[0]){
       for(var ci=0;ci<rows[0].length;ci++){
         var h=rows[0][ci];if(h==null)continue;
@@ -1498,6 +1523,7 @@ async function syncAll(){
         else if(hh==='TIME STAMP'||hh==='TIMESTAMP'||hh==='TIME')cTs=ci;
         else if(hh==='INSPECTED QTY'||hh==='INSPECTED')cInsQ=ci;
         else if(hh==='REMAINING QTY'||hh==='REMAINING')cRemQ=ci;
+        else if(hh==='TOTAL QUANTITY'||hh==='QTY'||hh==='QUANTITY')cTq=ci;
       }
     }
     if(cPc<0&&cSt<0&&cNote<0&&cTs<0){showToast('No update columns found in sheet');return;}
@@ -1517,9 +1543,9 @@ async function syncAll(){
             if(cur.toLowerCase().indexOf(INSPECT_EMAIL)<0)
               rows[i][8]=cur?cur+', '+INSPECT_EMAIL:INSPECT_EMAIL;
           }
-          var a=acOf(ids[si]);
-          if(cInsQ>=0&&a)rows[i][cInsQ]=inspQty(ids[si]);
-          if(cRemQ>=0&&a)rows[i][cRemQ]=remQty(a);
+          if(cTq>=0&&o.totalQty!=null)rows[i][cTq]=o.totalQty;
+          if(cInsQ>=0)rows[i][cInsQ]=inspQty(ids[si]);
+          if(cRemQ>=0)rows[i][cRemQ]=remQty(ids[si]);
           f=true;synced++;break;
         }
       }
@@ -1527,7 +1553,7 @@ async function syncAll(){
     }
     if(synced===0&&notFound>0){showToast('No matching activities found in sheet');return;}
     ws = XLSX.utils.aoa_to_sheet(rows);
-    var maxCol = Math.max(cPc,cSt,cNote,cTs,cInsQ,cRemQ,11);
+    var maxCol = Math.max(cPc,cSt,cNote,cTs,cInsQ,cRemQ,cTq,11);
     ws['!ref'] = 'A1:'+XLSX.utils.encode_col(maxCol)+rows.length;
     wb.Sheets[sn] = ws;
     var out = XLSX.write(wb, {type:'array', bookType:'xlsx'});
@@ -1564,7 +1590,7 @@ async function saveToExcel(id, st, pc, notes, quiet){
     var ws = wb.Sheets[sn];
     var rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:''});
     if(rows.length<2)return false;
-    var cPc=-1,cSt=-1,cNote=-1,cTs=-1,cInsQ=-1,cRemQ=-1;
+    var cPc=-1,cSt=-1,cNote=-1,cTs=-1,cInsQ=-1,cRemQ=-1,cTq=-1;
     if(rows[0]){
       for(var ci=0;ci<rows[0].length;ci++){
         var h=rows[0][ci];if(h==null)continue;
@@ -1575,6 +1601,7 @@ async function saveToExcel(id, st, pc, notes, quiet){
         else if(hh==='TIME STAMP'||hh==='TIMESTAMP'||hh==='TIME')cTs=ci;
         else if(hh==='INSPECTED QTY'||hh==='INSPECTED')cInsQ=ci;
         else if(hh==='REMAINING QTY'||hh==='REMAINING')cRemQ=ci;
+        else if(hh==='TOTAL QUANTITY'||hh==='QTY'||hh==='QUANTITY')cTq=ci;
       }
     }
     if(cPc<0&&cSt<0&&cNote<0&&cTs<0){console.log('[sync] no update columns found in header row');showToast('No update columns found in sheet');return false;}
@@ -1593,13 +1620,14 @@ async function saveToExcel(id, st, pc, notes, quiet){
         }
         var a=acOf(id);
         if(cInsQ>=0&&a)rows[i][cInsQ]=inspQty(id);
-        if(cRemQ>=0&&a)rows[i][cRemQ]=remQty(a);
+        if(cRemQ>=0&&a)rows[i][cRemQ]=remQty(id);
+        if(cTq>=0){var ov=ST.overrides[id];if(ov&&ov.totalQty!=null)rows[i][cTq]=ov.totalQty;}
         found=true;console.log('[sync] updated sheet row', i);break;
       }
     }
     if(!found){console.log('[sync] activity not found in sheet');showToast('Activity not found');return false;}
     ws = XLSX.utils.aoa_to_sheet(rows);
-    var maxCol = Math.max(cPc,cSt,cNote,cTs,cInsQ,cRemQ,11);
+    var maxCol = Math.max(cPc,cSt,cNote,cTs,cInsQ,cRemQ,cTq,11);
     ws['!ref'] = 'A1:'+XLSX.utils.encode_col(maxCol)+rows.length;
     wb.Sheets[sn] = ws;
     var out = XLSX.write(wb, {type:'array', bookType:'xlsx'});
