@@ -499,8 +499,8 @@ function saveOverrides(){
 function loadOverrides(){
   try{
     var d=localStorage.getItem('maseel_ovr');
-    if(d){ST.overrides=JSON.parse(d);}else{ST.overrides={};}
-  }catch(e){ST.overrides={};}
+    if(d){ST.overrides=JSON.parse(d);ST.syncQ=Object.keys(ST.overrides).length;}else{ST.overrides={};ST.syncQ=0;}
+  }catch(e){ST.overrides={};ST.syncQ=0;}
 }
 function clearOverrides(){
   ST.overrides={};
@@ -841,7 +841,7 @@ async function fetchLive() {
 
     PH = parsed.phases;
     AC = parsed.activities;
-    clearOverrides(); // clear local overrides when fresh data loaded
+    // overrides from localStorage persist across refreshes
 
     DS.state='live';
     DS.acts=AC.length;
