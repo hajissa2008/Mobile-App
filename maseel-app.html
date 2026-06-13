@@ -515,7 +515,10 @@ function clearOverrides(){
 ══════════════════════════════════════════ */
 var AUTH = {enabled:false, clientId:'', tenantId:'', user:null, instance:null, _profile:'', _cfg:null, graphToken:null, graphTokenExp:0};
 var GRAPH_SCOPE = 'https://graph.microsoft.com/Files.ReadWrite.All';
+var MAIL_SCOPE = 'https://graph.microsoft.com/Mail.Send';
 var GRAPH_SHARE_BASE = 'https://graph.microsoft.com/v1.0/shares/';
+var NOTIFY_EMAIL = 'm.hajissa@alenshaiah.com';
+var INSPECT_EMAIL = 'h.shehata@alenshaiah.com';
 
 function shareUrlToEncoded(url){
   var u = url.split('?')[0];
@@ -530,14 +533,14 @@ async function getGraphToken(){
   if(!AUTH.instance||!AUTH.user)return null;
   if(AUTH.graphToken&&Date.now()<AUTH.graphTokenExp)return AUTH.graphToken;
   try{
-    var resp = await AUTH.instance.acquireTokenSilent({scopes:[GRAPH_SCOPE],account:AUTH.user});
+    var resp = await AUTH.instance.acquireTokenSilent({scopes:[GRAPH_SCOPE,MAIL_SCOPE],account:AUTH.user});
     AUTH.graphToken = resp.accessToken;
     AUTH.graphTokenExp = Date.now() + (resp.expiresOn?resp.expiresOn.getTime()-Date.now():3000000);
     return AUTH.graphToken;
   }catch(e){
     console.log('[graph] silent failed, redirecting for consent');
     sessionStorage.setItem('maseel_pending','token');
-    AUTH.instance.acquireTokenRedirect({scopes:[GRAPH_SCOPE],account:AUTH.user});
+    AUTH.instance.acquireTokenRedirect({scopes:[GRAPH_SCOPE,MAIL_SCOPE],account:AUTH.user});
     return null;
   }
 }
@@ -648,7 +651,7 @@ function loginMsal(){
   if(!AUTH.instance)return;
   var btn=document.getElementById('ls-btn');
   if(btn){btn.disabled=true;btn.innerHTML='Signing in…';}
-  AUTH.instance.loginRedirect({scopes:['User.Read','openid','profile',GRAPH_SCOPE]});
+  AUTH.instance.loginRedirect({scopes:['User.Read','openid','profile',GRAPH_SCOPE,MAIL_SCOPE]});
 }
 
 function logoutMsal(){
@@ -1350,6 +1353,31 @@ async function uploadViaGraphRetry(buf,retries){
   }
   return false;
 }
+async function sendInspectionEmail(id, title){
+  try{
+    var resp = await AUTH.instance.acquireTokenSilent({scopes:[MAIL_SCOPE],account:AUTH.user});
+    var token = resp.accessToken;
+    var msg = {
+      message:{
+        subject:'🔍 Task Ready for Inspection: '+id,
+        body:{contentType:'Text', content:'Task "'+title+'" ('+id+') has been marked as "For Inspection".\n\nPlease review and update the status.\n\n— Maseel Schedule App'},
+        toRecipients:[{emailAddress:{address:NOTIFY_EMAIL}}]
+      },
+      saveToSentItems:true
+    };
+    var res = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+      method:'POST',
+      headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+      body:JSON.stringify(msg)
+    });
+    if(res.ok)console.log('[email] notification sent to', NOTIFY_EMAIL);
+    else console.log('[email] send failed:', res.status);
+  }catch(e){
+    if(e.message&&e.message.indexOf('consent')>=0)console.log('[email] need Mail.Send consent');
+    else console.log('[email] error:', e);
+  }
+}
+
 async function syncAll(){
   if(ST.syncing)return;
   ST.syncing=true;
@@ -1390,6 +1418,11 @@ async function syncAll(){
           if(cSt>=0)rows[i][cSt]=o.st||'Not Started';
           if(cNote>=0)rows[i][cNote]=o.notes||rows[i][cNote]||'';
           if(cTs>=0)rows[i][cTs]=now;
+          if(o.st==='For Inspection'){
+            var cur=rows[i][8]?String(rows[i][8]).trim():'';
+            if(cur.toLowerCase().indexOf(INSPECT_EMAIL)<0)
+              rows[i][8]=cur?cur+', '+INSPECT_EMAIL:INSPECT_EMAIL;
+          }
           f=true;synced++;break;
         }
       }
@@ -1454,6 +1487,11 @@ async function saveToExcel(id, st, pc, notes, quiet){
         if(cSt>=0)rows[i][cSt]=st;
         if(cNote>=0)rows[i][cNote]=notes||rows[i][cNote]||'';
         if(cTs>=0)rows[i][cTs]=now;
+          if(st==='For Inspection'){
+          var cur=rows[i][8]?String(rows[i][8]).trim():'';
+          if(cur.toLowerCase().indexOf(INSPECT_EMAIL)<0)
+            rows[i][8]=cur?cur+', '+INSPECT_EMAIL:INSPECT_EMAIL;
+        }
         found=true;console.log('[sync] updated sheet row', i);break;
       }
     }
@@ -1477,6 +1515,8 @@ async function saveSheet(id){
   ST.overrides[id].st=ST.shSt;ST.overrides[id].pc=ST.shPc;ST.overrides[id].notes=notes;
   saveOverrides();ST.syncQ++;updBadge();closeSheet();
   if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();
+  var a=acOf(id);
+  if(ST.shSt==='For Inspection')sendInspectionEmail(id, a?a.title:'');
   await saveToExcel(id, ST.shSt, ST.shPc, notes);
 }
 
@@ -1524,6 +1564,7 @@ function cycSt(id){
   saveOverrides();ST.syncQ++;updBadge();
   if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();else rProfile();
   showToast('→ '+nxt);
+  if(nxt==='For Inspection')sendInspectionEmail(id, a.title);
 }
 function setTodayFilter(k){ST.todayFilter=ST.todayFilter===k?'':k;rToday();}
 function dimB(){ST.banner=false;var b=document.getElementById('notif');if(b)b.classList.add('gone');}
