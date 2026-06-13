@@ -548,14 +548,15 @@ async function ensureDriveIds(){
   if(!token)return false;
   try{
     var encoded = shareUrlToEncoded(SP_SHARE_URL);
-    var res = await fetch(GRAPH_SHARE_BASE + encoded + '/driveItem', {headers:{'Authorization':'Bearer '+token}});
-    if(!res.ok)return false;
+    var res = await fetch(GRAPH_SHARE_BASE + encoded + '/driveItem?$select=id,parentReference', {headers:{'Authorization':'Bearer '+token}});
+    if(!res.ok){console.log('[graph] driveItem lookup failed:', res.status);return false;}
     var item = await res.json();
+    if(!item.parentReference||!item.parentReference.driveId||!item.id){console.log('[graph] driveItem missing id/parentReference', item);return false;}
     ST.graphDriveId = item.parentReference.driveId;
     ST.graphItemId = item.id;
     try{localStorage.setItem('maseel_gdrive',JSON.stringify({d:ST.graphDriveId,i:ST.graphItemId}));}catch(e){}
     return true;
-  }catch(e){return false;}
+  }catch(e){console.log('[graph] ensureDriveIds error:', e);return false;}
 }
 
 function graphContentUrl(){
@@ -1026,7 +1027,7 @@ function rToday(){
       '<div class="ph-title">'+(tf||'Active Activities')+'</div>'+
     '</div>'+
     '<div class="sw-wrap"><div class="sw-box">'+I.srch+
-      '<input type="text" placeholder="Search by name, ID, discipline…" value="'+escH(ST.searchQ)+
+      '<input type="text" name="search-today" placeholder="Search by name, ID, discipline…" value="'+escH(ST.searchQ)+
       '" oninput="ST.searchQ=this.value;rToday()" autocomplete="off" autocorrect="off" spellcheck="false">'+
     '</div></div>';
 
@@ -1112,7 +1113,7 @@ function rTimeline(){
       '<div style="font-size:11px;font-weight:700;color:var(--t3);background:var(--bg2);border:1px solid var(--bd);border-radius:9px;padding:5px 10px">EMSL-15</div>'+
     '</div>'+
     '<div class="sw-wrap"><div class="sw-box">'+I.srch+
-      '<input type="text" placeholder="Filter by name, ID, discipline…" value="'+escH(ST.searchQ)+
+      '<input type="text" name="search-timeline" placeholder="Filter by name, ID, discipline…" value="'+escH(ST.searchQ)+
       '" oninput="ST.searchQ=this.value;rTimeline()" autocomplete="off" autocorrect="off" spellcheck="false">'+
     '</div></div>'+
     '<div class="ovr">'+
@@ -1340,14 +1341,15 @@ async function syncAll(){
   if(!token){console.log('[sync] syncAll: no token');return;}
   var ids = Object.keys(ST.overrides);
   var synced=0;
+  var fails=0;
   for(var si=0;si<ids.length;si++){
     var o = ST.overrides[ids[si]];
     if(!o)continue;
     var ok = await saveToExcel(ids[si], o.st||'Not Started', o.pc!=null?o.pc:0, o.notes||'', true);
     if(ok)synced++;
-    else break;
+    else fails++;
   }
-  showToast(synced>0?'✓ Synced '+synced+' of '+ids.length:'Sync stopped');
+  showToast(synced>0?'✓ Synced '+synced+' of '+(synced+fails):(fails>0?'Sync failed — see console':'Nothing to sync'));
   rProfile();
 }
 
