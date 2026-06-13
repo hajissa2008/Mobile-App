@@ -975,15 +975,17 @@ function rToday(){
   var tf=ST.todayFilter;
   for(var i=0;i<vAC.length;i++){
     var a=vAC[i];var st=effSt(a);
-    if(st==='Done'&&tf!=='Done')continue;
+    var isActive=a.s<=DATA_DATE&&a.f>=DATA_DATE;
+    var isOverdue=a.f<DATA_DATE&&st!=='Done'&&st!=='For Inspection';
     if(tf){
-      if(tf==='Overdue'){
-        if(st==='Done'||st==='For Inspection')continue;
-        if(!(a.f<DATA_DATE||(a.float!=null&&a.float<0)))continue;
-      }else if(st!==tf)continue;
+      if(tf==='Not Started'&&!(isActive&&st==='Not Started'))continue;
+      else if(tf==='Overdue'&&!isOverdue)continue;
+      else if(tf==='In Progress'&&!(isActive&&st==='In Progress'&&!isOverdue))continue;
+      else if(tf==='For Inspection'&&st!=='For Inspection')continue;
+      else if(tf==='Done'&&st!=='Done')continue;
     }else{
       if(st==='Done')continue;
-      if(!(a.s<=DATA_DATE&&a.f>=DATA_DATE))continue;
+      if(!isActive)continue;
     }
     if(!q||a.title.toLowerCase().indexOf(q)>-1||a.id.toLowerCase().indexOf(q)>-1||(a.disc||'').toLowerCase().indexOf(q)>-1)
       active.push(a);
@@ -1009,7 +1011,12 @@ function rToday(){
   }
   /* KPI counts from all visible activities */
   var kNs=0,kOv=0,kIp=0,kFi=0,kDn=0;
-  for(var i=0;i<vAC.length;i++){var s=effSt(vAC[i]);if(s==='Not Started')kNs++;else if(s==='In Progress')kIp++;else if(s==='For Inspection')kFi++;else if(s==='Done')kDn++;if(s!=='Done'&&s!=='For Inspection'&&(vAC[i].f<DATA_DATE||(vAC[i].float!=null&&vAC[i].float<0)))kOv++;}
+  for(var i=0;i<vAC.length;i++){var a=vAC[i],s=effSt(a),isActive=a.s<=DATA_DATE&&a.f>=DATA_DATE,isOverdue=a.f<DATA_DATE&&s!=='Done'&&s!=='For Inspection';
+    if(isActive&&s==='Not Started')kNs++;
+    if(isOverdue)kOv++;
+    if(isActive&&s==='In Progress'&&!isOverdue)kIp++;
+    if(s==='For Inspection')kFi++;
+    if(s==='Done')kDn++;}
   var kpis=[
     {k:'Not Started',c:'#9CA3AF',v:kNs},
     {k:'Overdue',c:'#EF4444',v:kOv},
