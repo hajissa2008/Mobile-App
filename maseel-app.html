@@ -1452,7 +1452,7 @@ async function syncAll(){
     var out = XLSX.write(wb, {type:'array', bookType:'xlsx'});
     var ok = await uploadViaGraphRetry(out, 5);
     if(ok){
-      ST.overrides={};ST.syncQ=0;saveOverrides();updBadge();
+      ST.syncQ=0;updBadge();
       showToast('✓ Synced '+synced+' activity'+(synced>1?'ies':'y'));
     } else {
       showToast('File locked — close Excel and try again');
