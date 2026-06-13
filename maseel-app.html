@@ -769,30 +769,23 @@ function parseP6Buffer(buffer) {
     for (var ai=0; ai<acts.length; ai++) activities.push(acts[ai]);
   }
 
-  /* Apply Maseel Updates sheet (if present) */
-  var updatesSheet = wb.Sheets['Maseel Updates'];
-  if(updatesSheet){
-    var upRows = XLSX.utils.sheet_to_json(updatesSheet, {header:1, raw:true, defval:''});
-    if(upRows.length>1){
-      var upMap = {};
-      for(var ui=1;ui<upRows.length;ui++){
-        var r=upRows[ui];
-        if(!r[0])continue;
-        var aid=String(r[0]).trim();
-        if(!upMap[aid]||r[5]>upMap[aid][5])upMap[aid]=r;
-      }
-      for(var ai=0;ai<activities.length;ai++){
-        var up=upMap[activities[ai].id];
-        if(up){
-          if(up[1])activities[ai].st=up[1];
-          if(up[2]!=null&&up[2]!=='')activities[ai].pc=parseInt(up[2]);
-          if(up[3])activities[ai].notes=up[3];
-        }
-      }
+  /* Read PROGRESS(9), STATUS(10), NOTE(11), TIME STAMP(12) from main sheet */
+  var actRowMap = {};
+  for(var ri=1;ri<rows.length;ri++){
+    var rId=rows[ri][0];
+    if(rId!=null&&LEAF_RE.test(String(rId).trim()))actRowMap[String(rId).trim()]=ri;
+  }
+  for(var ai=0;ai<activities.length;ai++){
+    var ri=actRowMap[activities[ai].id];
+    if(ri!=null){
+      var r=rows[ri];
+      if(r[10])activities[ai].st=r[10];
+      if(r[9]!=null&&r[9]!=='')activities[ai].pc=parseInt(r[9])||0;
+      if(r[11])activities[ai].notes=r[11];
     }
   }
 
-  return {phases:phases, activities:activities, workbook:wb};
+  return {phases:phases, activities:activities};
 }
 
 /* ══════════════════════════════════════════
@@ -1342,32 +1335,24 @@ async function saveToExcel(id, st, pc, notes, quiet){
   if(!buf){if(!quiet)showToast('Saved locally (Graph unavailable)');return false;}
   try{
     var wb = XLSX.read(new Uint8Array(buf), {type:'array', raw:true, cellDates:false});
-    console.log('[sync] workbook sheets:', wb.SheetNames);
-    var sn = 'Maseel Updates';
+    var sn = wb.SheetNames[0];
     var ws = wb.Sheets[sn];
-    var rows;
-    if(ws){
-      rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:''});
-      console.log('[sync] existing sheet rows:', rows.length);
-    } else {
-      rows = [['Activity ID','Status','Progress','Notes','User','Timestamp']];
-      ws = XLSX.utils.aoa_to_sheet(rows);
-      console.log('[sync] creating new Updates sheet');
-    }
+    var rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:''});
+    if(rows.length<2)return false;
     var now = new Date().toISOString();
-    var user = AUTH.user?AUTH.user.username||AUTH._profile||'unknown':'unknown';
     var found = false;
     for(var i=1;i<rows.length;i++){
-      if(String(rows[i][0]).trim()===id){
-        rows[i][1]=st;rows[i][2]=pc;rows[i][3]=notes||rows[i][3]||'';rows[i][4]=user;rows[i][5]=now;
-        found=true;console.log('[sync] updated existing row', i);break;
+      if(rows[i][0]!=null&&String(rows[i][0]).trim()===id){
+        rows[i][9]=pc;    // PROGRESS
+        rows[i][10]=st;   // STATUS
+        rows[i][11]=notes||rows[i][11]||''; // NOTE
+        rows[i][12]=now;  // TIME STAMP
+        found=true;console.log('[sync] updated sheet row', i);break;
       }
     }
-    if(!found){rows.push([id,st,pc,notes||'',user,now]);console.log('[sync] appended new row');}
+    if(!found){console.log('[sync] activity not found in sheet');showToast('Activity not found');return false;}
     ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!ref'] = 'A1:F'+rows.length;
-    wb.SheetNames = wb.SheetNames.filter(function(n){return n!==sn;});
-    wb.SheetNames.push(sn);
+    ws['!ref'] = 'A1:M'+rows.length;
     wb.Sheets[sn] = ws;
     var out = XLSX.write(wb, {type:'array', bookType:'xlsx'});
     console.log('[sync] workbook written, size:', out.byteLength, 'bytes');
