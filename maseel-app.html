@@ -1351,20 +1351,22 @@ async function uploadViaGraphRetry(buf,retries){
   return false;
 }
 async function syncAll(){
-  showToast('Syncing all pending changes…');
-  console.log('[sync] syncAll starting, pending:', ST.syncQ);
-  var token = await getGraphToken();
-  if(!token){console.log('[sync] syncAll: no token');return;}
-  var ids = Object.keys(ST.overrides);
-  /* Batch: download workbook ONCE, apply all overrides, upload ONCE */
-  var buf = await fetchViaGraphRetry(5);
-  if(!buf){showToast('File locked — close Excel and try again');rProfile();return;}
+  if(ST.syncing)return;
+  ST.syncing=true;
   try{
+    showToast('Syncing all pending changes…');
+    console.log('[sync] syncAll starting, pending:', ST.syncQ);
+    var token = await getGraphToken();
+    if(!token)return;
+    var ids = Object.keys(ST.overrides);
+    if(!ids.length)return;
+    var buf = await fetchViaGraphRetry(5);
+    if(!buf){showToast('File locked — close Excel and try again');return;}
     var wb = XLSX.read(new Uint8Array(buf), {type:'array', raw:true, cellDates:false});
     var sn = wb.SheetNames[0];
     var ws = wb.Sheets[sn];
     var rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:''});
-    if(rows.length<2){showToast('Empty sheet');rProfile();return;}
+    if(rows.length<2)return;
     var cPc=-1,cSt=-1,cNote=-1,cTs=-1;
     if(rows[0]){
       for(var ci=0;ci<rows[0].length;ci++){
@@ -1376,39 +1378,38 @@ async function syncAll(){
         else if(hh==='TIME STAMP'||hh==='TIMESTAMP'||hh==='TIME')cTs=ci;
       }
     }
-    if(cPc<0&&cSt<0&&cNote<0&&cTs<0){showToast('No update columns found in sheet');rProfile();return;}
+    if(cPc<0&&cSt<0&&cNote<0&&cTs<0){showToast('No update columns found in sheet');return;}
     var now = new Date().toISOString();
     var synced=0,notFound=0;
     for(var si=0;si<ids.length;si++){
       var o=ST.overrides[ids[si]];if(!o)continue;
-      var found=false;
+      var f=false;
       for(var i=1;i<rows.length;i++){
         if(rows[i][0]!=null&&String(rows[i][0]).trim()===ids[si]){
           if(cPc>=0)rows[i][cPc]=o.pc!=null?o.pc:0;
           if(cSt>=0)rows[i][cSt]=o.st||'Not Started';
           if(cNote>=0)rows[i][cNote]=o.notes||rows[i][cNote]||'';
           if(cTs>=0)rows[i][cTs]=now;
-          found=true;synced++;break;
+          f=true;synced++;break;
         }
       }
-      if(!found)notFound++;
+      if(!f)notFound++;
     }
-    if(synced===0&&notFound>0){showToast('No matching activities found in sheet');rProfile();return;}
+    if(synced===0&&notFound>0){showToast('No matching activities found in sheet');return;}
     ws = XLSX.utils.aoa_to_sheet(rows);
     var maxCol = Math.max(cPc,cSt,cNote,cTs,11);
     ws['!ref'] = 'A1:'+XLSX.utils.encode_col(maxCol)+rows.length;
     wb.Sheets[sn] = ws;
     var out = XLSX.write(wb, {type:'array', bookType:'xlsx'});
-    console.log('[sync] batch workbook written, size:', out.byteLength, 'bytes');
-    var ok = await uploadViaGraphRetry(out, 3);
+    var ok = await uploadViaGraphRetry(out, 5);
     if(ok){
       ST.overrides={};ST.syncQ=0;saveOverrides();updBadge();
       showToast('✓ Synced '+synced+' activity'+(synced>1?'ies':'y'));
     } else {
       showToast('File locked — close Excel and try again');
     }
-    rProfile();
-  }catch(e){console.error('[sync] batch error:', e);showToast('Sync error: '+e.message);rProfile();}
+  }catch(e){console.error('[sync] batch error:', e);showToast('Sync error: '+e.message);}
+  finally{ST.syncing=false;try{rProfile();}catch(e){}}
 }
 
 async function testGraph(){
@@ -1630,6 +1631,11 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register('sw.js').catch(
   /* Attempt live SharePoint fetch */
   await fetchLive();
 
+  /* Auto-sync any pending overrides to Excel */
+  if(ST.syncQ>0&&AUTH.user){
+    setTimeout(function(){if(ST.syncQ>0&&!ST.syncing)syncAll();}, 1000);
+  }
+
   /* Re-render with live data (or confirm cached) */
   try{rToday();}catch(e){}
   try{rTimeline();}catch(e){}
@@ -1645,7 +1651,10 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register('sw.js').catch(
       if(AUTH.instance||typeof msal!=='undefined'){
         clearInterval(waitMsal);
         var accs=AUTH.instance?AUTH.instance.getAllAccounts():[];
-        if(accs&&accs.length>0){AUTH.user=accs[0];hideLoginScreen();}else{showLoginScreen();}
+        if(accs&&accs.length>0){
+          AUTH.user=accs[0];hideLoginScreen();
+          if(ST.syncQ>0)setTimeout(function(){if(ST.syncQ>0&&!ST.syncing)syncAll();}, 1500);
+        }else{showLoginScreen();}
       }
     },200);
     setTimeout(function(){clearInterval(waitMsal);if(!AUTH.user)showLoginScreen();},5000);
