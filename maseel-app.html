@@ -1403,7 +1403,7 @@ function go(t){
   document.getElementById('s-'+t).classList.add('active');
   if(t==='today')rToday();else if(t==='timeline')rTimeline();else rProfile();
 }
-var CYCLE=['Not Started','In Progress','Done'];
+var CYCLE=['Not Started','In Progress','For Inspection','Done'];
 function cycSt(id){
   var a=acOf(id);if(!a)return;
   var cur=effSt(a),nxt=CYCLE[(CYCLE.indexOf(cur)+1)%CYCLE.length];
