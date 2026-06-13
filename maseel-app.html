@@ -490,7 +490,8 @@ var DS = {state:'loading', msg:'Connecting to SharePoint…', ts:'', acts:0, err
 var ST = {
   tab:'today', banner:true, openPh:{}, syncQ:0, syncing:false,
   calSync:true, notif:true, selId:null, shSt:null, shPc:0, calAdded:false,
-  searchQ:'', overrides:{}, _toast:null, _syncT:null, dpEvent:null, todayFilter:''
+  searchQ:'', overrides:{}, _toast:null, _syncT:null, dpEvent:null, todayFilter:'',
+  graphDriveId:null, graphItemId:null
 };
 
 function saveOverrides(){
@@ -500,6 +501,8 @@ function loadOverrides(){
   try{
     var d=localStorage.getItem('maseel_ovr');
     if(d){ST.overrides=JSON.parse(d);ST.syncQ=Object.keys(ST.overrides).length;}else{ST.overrides={};ST.syncQ=0;}
+    var gd=localStorage.getItem('maseel_gdrive');
+    if(gd){var g=JSON.parse(gd);ST.graphDriveId=g.d;ST.graphItemId=g.i;}
   }catch(e){ST.overrides={};ST.syncQ=0;}
 }
 function clearOverrides(){
@@ -539,25 +542,45 @@ async function getGraphToken(){
   }
 }
 
+async function ensureDriveIds(){
+  if(ST.graphDriveId&&ST.graphItemId)return true;
+  var token = await getGraphToken();
+  if(!token)return false;
+  try{
+    var encoded = shareUrlToEncoded(SP_SHARE_URL);
+    var res = await fetch(GRAPH_SHARE_BASE + encoded + '/driveItem', {headers:{'Authorization':'Bearer '+token}});
+    if(!res.ok)return false;
+    var item = await res.json();
+    ST.graphDriveId = item.parentReference.driveId;
+    ST.graphItemId = item.id;
+    try{localStorage.setItem('maseel_gdrive',JSON.stringify({d:ST.graphDriveId,i:ST.graphItemId}));}catch(e){}
+    return true;
+  }catch(e){return false;}
+}
+
+function graphContentUrl(){
+  return 'https://graph.microsoft.com/v1.0/drives/'+ST.graphDriveId+'/items/'+ST.graphItemId+'/content';
+}
+
 async function fetchViaGraph(){
+  var ok = await ensureDriveIds();
+  if(!ok)return null;
   var token = await getGraphToken();
   if(!token)return null;
-  var encoded = shareUrlToEncoded(SP_SHARE_URL);
-  var url = GRAPH_SHARE_BASE + encoded + '/driveItem/content';
   try{
-    var res = await fetch(url, {headers:{'Authorization':'Bearer '+token}});
+    var res = await fetch(graphContentUrl(), {headers:{'Authorization':'Bearer '+token}});
     if(!res.ok)return null;
     return await res.arrayBuffer();
   }catch(e){return null;}
 }
 
 async function uploadViaGraph(buf){
+  var ok = await ensureDriveIds();
+  if(!ok)return false;
   var token = await getGraphToken();
   if(!token)return false;
-  var encoded = shareUrlToEncoded(SP_SHARE_URL);
-  var url = GRAPH_SHARE_BASE + encoded + '/driveItem/content';
   try{
-    var res = await fetch(url, {
+    var res = await fetch(graphContentUrl(), {
       method:'PUT',
       headers:{'Authorization':'Bearer '+token, 'Content-Type':'application/octet-stream'},
       body:buf
@@ -769,7 +792,18 @@ function parseP6Buffer(buffer) {
     for (var ai=0; ai<acts.length; ai++) activities.push(acts[ai]);
   }
 
-  /* Read PROGRESS(9), STATUS(10), NOTE(11), TIME STAMP(12) from main sheet */
+  /* Map column headers from header row (find PROGRESS/STATUS/NOTE/TIME STAMP by name) */
+  var colPc=-1, colSt=-1, colNote=-1;
+  if(rows[0]){
+    for(var ci=0;ci<rows[0].length;ci++){
+      var h=rows[0][ci];
+      if(h==null)continue;
+      var hh=String(h).trim().toUpperCase();
+      if(hh==='PROGRESS')colPc=ci;
+      else if(hh==='STATUS')colSt=ci;
+      else if(hh==='NOTE'||hh==='NOTES')colNote=ci;
+    }
+  }
   var actRowMap = {};
   for(var ri=1;ri<rows.length;ri++){
     var rId=rows[ri][0];
@@ -779,9 +813,9 @@ function parseP6Buffer(buffer) {
     var ri=actRowMap[activities[ai].id];
     if(ri!=null){
       var r=rows[ri];
-      if(r[10])activities[ai].st=r[10];
-      if(r[9]!=null&&r[9]!=='')activities[ai].pc=parseInt(r[9])||0;
-      if(r[11])activities[ai].notes=r[11];
+      if(colSt>=0&&r[colSt])activities[ai].st=r[colSt];
+      if(colPc>=0&&r[colPc]!=null&&r[colPc]!=='')activities[ai].pc=parseInt(r[colPc])||0;
+      if(colNote>=0&&r[colNote])activities[ai].notes=r[colNote];
     }
   }
 
@@ -1339,20 +1373,34 @@ async function saveToExcel(id, st, pc, notes, quiet){
     var ws = wb.Sheets[sn];
     var rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:''});
     if(rows.length<2)return false;
+    /* Find column indices from header row */
+    var cPc=-1,cSt=-1,cNote=-1,cTs=-1;
+    if(rows[0]){
+      for(var ci=0;ci<rows[0].length;ci++){
+        var h=rows[0][ci];if(h==null)continue;
+        var hh=String(h).trim().toUpperCase();
+        if(hh==='PROGRESS')cPc=ci;
+        else if(hh==='STATUS')cSt=ci;
+        else if(hh==='NOTE'||hh==='NOTES')cNote=ci;
+        else if(hh==='TIME STAMP'||hh==='TIMESTAMP'||hh==='TIME'||hh==='TIME STAMP')cTs=ci;
+      }
+    }
+    if(cPc<0&&cSt<0&&cNote<0&&cTs<0){console.log('[sync] no update columns found in header row');showToast('No update columns found in sheet');return false;}
     var now = new Date().toISOString();
     var found = false;
     for(var i=1;i<rows.length;i++){
       if(rows[i][0]!=null&&String(rows[i][0]).trim()===id){
-        rows[i][9]=pc;    // PROGRESS
-        rows[i][10]=st;   // STATUS
-        rows[i][11]=notes||rows[i][11]||''; // NOTE
-        rows[i][12]=now;  // TIME STAMP
+        if(cPc>=0)rows[i][cPc]=pc;
+        if(cSt>=0)rows[i][cSt]=st;
+        if(cNote>=0)rows[i][cNote]=notes||rows[i][cNote]||'';
+        if(cTs>=0)rows[i][cTs]=now;
         found=true;console.log('[sync] updated sheet row', i);break;
       }
     }
     if(!found){console.log('[sync] activity not found in sheet');showToast('Activity not found');return false;}
     ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!ref'] = 'A1:M'+rows.length;
+    var maxCol = Math.max(cPc,cSt,cNote,cTs,11);
+    ws['!ref'] = 'A1:'+XLSX.utils.encode_col(maxCol)+rows.length;
     wb.Sheets[sn] = ws;
     var out = XLSX.write(wb, {type:'array', bookType:'xlsx'});
     console.log('[sync] workbook written, size:', out.byteLength, 'bytes');
