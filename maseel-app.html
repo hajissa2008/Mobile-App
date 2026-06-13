@@ -104,6 +104,12 @@ body{height:100%;overflow:hidden;overscroll-behavior:none;
 .stat{flex:1;background:var(--bg2);border:1px solid var(--bd);border-radius:14px;padding:11px 6px;text-align:center}
 .sv{font-family:var(--FD);font-size:22px;font-weight:800;line-height:1}
 .sl{font-size:10px;color:var(--t2);margin-top:3px;font-weight:500}
+.kpis{display:flex;gap:6px;padding:0 16px 10px}
+.kpi{flex:1;background:var(--bg2);border:2px solid transparent;border-radius:12px;padding:8px 4px;text-align:center;cursor:pointer;touch-action:manipulation;transition:border-color .2s,background .2s;-webkit-appearance:none}
+.kpi:active{background:var(--bg3)}
+.kpi-on{background:var(--bg3);box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+.kv{font-family:var(--FD);font-size:18px;font-weight:800;line-height:1}
+.kl{font-size:8px;margin-top:4px;font-weight:600;line-height:1.2;text-transform:uppercase;letter-spacing:.2px}
 /* ── GROUP HEADER ── */
 .pg-sec{display:flex;align-items:center;gap:8px;padding:6px 20px 7px}
 .pg-dot{width:6px;height:6px;border-radius:50%}
@@ -122,6 +128,7 @@ body{height:100%;overflow:hidden;overscroll-behavior:none;
 .ci-ip{border-color:#3B82F6!important;background:rgba(59,130,246,.12)!important}
 .ci-dn{border-color:#10B981!important;background:#10B981!important}
 .ci-bk{border-color:#EF4444!important;background:rgba(239,68,68,.12)!important}
+.ci-fi{border-color:#F87171!important;background:rgba(248,113,113,.12)!important}
 .cinfo{flex:1;min-width:0}
 .ctit{font-family:var(--FD);font-size:13px;font-weight:600;line-height:1.3;word-break:break-word}
 .cdisc{font-size:11px;color:var(--t3);margin-top:2px}
@@ -483,7 +490,7 @@ var DS = {state:'loading', msg:'Connecting to SharePoint…', ts:'', acts:0, err
 var ST = {
   tab:'today', banner:true, openPh:{}, syncQ:0, syncing:false,
   calSync:true, notif:true, selId:null, shSt:null, shPc:0, calAdded:false,
-  searchQ:'', overrides:{}, _toast:null, _syncT:null, dpEvent:null
+  searchQ:'', overrides:{}, _toast:null, _syncT:null, dpEvent:null, todayFilter:''
 };
 
 function saveOverrides(){
@@ -965,23 +972,29 @@ function rToday(){
   var q=(ST.searchQ||'').toLowerCase();
   var vAC=visibleAC();
   var active=[];
+  var tf=ST.todayFilter;
   for(var i=0;i<vAC.length;i++){
     var a=vAC[i];var st=effSt(a);
-    if(st==='Done')continue;
-    if(a.s<=DATA_DATE&&a.f>=DATA_DATE){
-      if(!q||a.title.toLowerCase().indexOf(q)>-1||a.id.toLowerCase().indexOf(q)>-1||(a.disc||'').toLowerCase().indexOf(q)>-1)
-        active.push(a);
+    if(st==='Done'&&tf!=='Done')continue;
+    if(tf){
+      if(tf==='Overdue'){
+        if(st==='Done'||st==='For Inspection')continue;
+        if(!(a.f<DATA_DATE||(a.float!=null&&a.float<0)))continue;
+      }else if(st!==tf)continue;
+    }else{
+      if(st==='Done')continue;
+      if(!(a.s<=DATA_DATE&&a.f>=DATA_DATE))continue;
     }
+    if(!q||a.title.toLowerCase().indexOf(q)>-1||a.id.toLowerCase().indexOf(q)>-1||(a.disc||'').toLowerCase().indexOf(q)>-1)
+      active.push(a);
   }
-  var inP=0,ov=0;
-  for(var i=0;i<vAC.length;i++){var s=effSt(vAC[i]);if(s==='In Progress')inP++;if(s!=='Done'&&(vAC[i].f<DATA_DATE||(vAC[i].float!=null&&vAC[i].float<0)))ov++;}
   var grp={};
   for(var i=0;i<active.length;i++){var a=active[i];if(!grp[a.ph])grp[a.ph]=[];grp[a.ph].push(a);}
 
   var h=connBanner()+permBanner()+
     '<div class="ph-hdr">'+
       '<div class="ph-date">'+(new Date().toLocaleDateString('en-US',{weekday:'long',day:'numeric',month:'long',year:'numeric'}))+'</div>'+
-      '<div class="ph-title">Active Activities</div>'+
+      '<div class="ph-title">'+(tf||'Active Activities')+'</div>'+
     '</div>'+
     '<div class="sw-wrap"><div class="sw-box">'+I.srch+
       '<input type="text" placeholder="Search by name, ID, discipline…" value="'+escH(ST.searchQ)+
@@ -991,14 +1004,27 @@ function rToday(){
   if(ST.banner){
     h+='<div class="notif'+(ST.banner?'':' gone')+'" id="notif">'+
       '<div class="n-ico">'+I.bell+'</div>'+
-      '<div class="n-body"><b>P6 Update — 3 Jun 2026</b><s>'+active.length+' activities active across '+Object.keys(grp).length+' phases · Project float: −49 days</s></div>'+
+      '<div class="n-body"><b>P6 Update — 3 Jun 2026</b><s>'+active.length+' activity'+(active.length!==1?'ies':'')+' · Project float: −49 days</s></div>'+
       '<button class="n-x" onclick="event.stopPropagation();dimB()">'+I.x+'</button></div>';
   }
-  h+='<div class="stats">'+
-    '<div class="stat"><div class="sv" style="color:var(--a)">'+active.length+'</div><div class="sl">Active</div></div>'+
-    '<div class="stat"><div class="sv" style="color:var(--bl)">'+inP+'</div><div class="sl">In Progress</div></div>'+
-    '<div class="stat"><div class="sv" style="color:'+(ov>0?'var(--rd)':'var(--t3)')+'">'+ov+'</div><div class="sl">Overdue</div></div>'+
-  '</div>';
+  /* KPI counts from all visible activities */
+  var kNs=0,kOv=0,kIp=0,kFi=0,kDn=0;
+  for(var i=0;i<vAC.length;i++){var s=effSt(vAC[i]);if(s==='Not Started')kNs++;else if(s==='In Progress')kIp++;else if(s==='For Inspection')kFi++;else if(s==='Done')kDn++;if(s!=='Done'&&s!=='For Inspection'&&(vAC[i].f<DATA_DATE||(vAC[i].float!=null&&vAC[i].float<0)))kOv++;}
+  var kpis=[
+    {k:'Not Started',c:'#9CA3AF',v:kNs},
+    {k:'Overdue',c:'#EF4444',v:kOv},
+    {k:'In Progress',c:'#60A5FA',v:kIp},
+    {k:'For Inspection',c:'#F87171',v:kFi},
+    {k:'Done',c:'#34D399',v:kDn}
+  ];
+  h+='<div class="kpis">';
+  for(var ki=0;ki<kpis.length;ki++){
+    var kp=kpis[ki];
+    var sel=ST.todayFilter===kp.k;
+    h+='<div class="kpi'+(sel?' kpi-on':'')+'" style="'+(sel?'border-color:'+kp.c:'')+';color:'+kp.c+'" onclick="setTodayFilter(\''+kp.k+'\')">'+
+      '<div class="kv">'+kp.v+'</div><div class="kl">'+kp.k.replace(/ /g,'<br>')+'</div></div>';
+  }
+  h+='</div>'+(ST.todayFilter?'<div style="padding:0 16px 8px;font-size:10px;color:var(--t3)">Filtered: '+ST.todayFilter+' · <a href="#" onclick="ST.todayFilter=\'\';rToday();return false" style="color:var(--a);text-decoration:none">Clear</a></div>':'');
 
   var phOrder=['MOB','SD','P1','P2','P3','P4','P5','ML'];
   var shown=false;
@@ -1013,8 +1039,8 @@ function rToday(){
   }
   if(!shown)h+='<div style="text-align:center;padding:40px 20px;color:var(--t3)">'+
     I.ckGr.replace(/14/g,'40')+
-    '<div style="font-family:var(--FD);font-size:16px;font-weight:700;color:var(--t1);margin-top:10px">'+(q?'No matches':'All clear!')+'</div>'+
-    '<div style="font-size:13px;margin-top:4px">'+(q?'Try different keywords':'No activities due on data date')+'</div></div>';
+    '<div style="font-family:var(--FD);font-size:16px;font-weight:700;color:var(--t1);margin-top:10px">'+(q?'No matches':tf?'No '+tf+' activities':'All clear!')+'</div>'+
+    '<div style="font-size:13px;margin-top:4px">'+(q?'Try different keywords':tf?'Tap another KPI or clear filter':'No activities due on data date')+'</div></div>';
   h+='<div style="height:24px"></div>';
   var el=document.getElementById('s-today');if(el)el.innerHTML=h;
 }
@@ -1024,7 +1050,7 @@ function buildCard(a){
   return'<div class="card'+(st==='Done'?' fade-c':'')+'" onclick="openSheet(\''+a.id+'\')" style="border-left:none">'+
     '<div class="stripe" style="background:'+c+'"></div>'+
     '<div class="crow">'+
-      '<div class="circ ci-'+k+'" style="border-color:'+(k==='dn'?'#10B981':k==='ip'?'#3B82F6':'rgba(255,255,255,.13)')+'" onclick="event.stopPropagation();cycSt(\''+a.id+'\')">'+circInner(st)+'</div>'+
+      '<div class="circ ci-'+k+'" style="border-color:'+(k==='dn'?'#10B981':k==='ip'?'#3B82F6':k==='fi'?'#F87171':'rgba(255,255,255,.13)')+'" onclick="event.stopPropagation();cycSt(\''+a.id+'\')">'+circInner(st)+'</div>'+
       '<div class="cinfo">'+
         '<div class="ctit">'+escH(a.title)+'</div>'+
         (a.disc?'<div class="cdisc">'+escH(a.disc)+'</div>':'')+
@@ -1223,7 +1249,7 @@ function openSheet(id){
   var st=effSt(a),pc=effPc(a);
   ST.shSt=st;ST.shPc=pc;ST.calAdded=false;
   var opts=[{k:'Not Started',cls:'s-ns',col:'#9CA3AF'},{k:'In Progress',cls:'s-ip',col:'#60A5FA'},
-            {k:'Done',cls:'s-dn',col:'#34D399'},{k:'For Inspection',cls:'s-fi',col:'#F87171'}];
+            {k:'For Inspection',cls:'s-fi',col:'#F87171'},{k:'Done',cls:'s-dn',col:'#34D399'}];
   var h='<div class="sh-handle"></div>'+
     '<div class="sh-hd">'+
       '<div style="display:flex;align-items:center;justify-content:space-between">'+
@@ -1263,7 +1289,7 @@ function closeSheet(){var ov=document.getElementById('fov');if(ov)ov.classList.r
 function selSt(k,col){
   ST.shSt=k;
   var opts=document.querySelectorAll('.sopt');
-  var keys=['Not Started','In Progress','Done','For Inspection'],clss=['s-ns','s-ip','s-dn','s-fi'],cols=['#9CA3AF','#60A5FA','#34D399','#F87171'];
+  var keys=['Not Started','In Progress','For Inspection','Done'],clss=['s-ns','s-ip','s-fi','s-dn'],cols=['#9CA3AF','#60A5FA','#F87171','#34D399'];
   for(var i=0;i<opts.length;i++){
     opts[i].className='sopt'+(keys[i]===k?' '+clss[i]:'');
     var r=opts[i].querySelector('.so-radio');
@@ -1365,7 +1391,7 @@ function go(t){
   var p=ST.tab;
   document.getElementById('t-'+p).classList.remove('on');
   document.getElementById('s-'+p).classList.remove('active');
-  ST.tab=t;ST.searchQ='';
+  ST.tab=t;ST.searchQ='';ST.todayFilter='';
   document.getElementById('t-'+t).classList.add('on');
   document.getElementById('s-'+t).classList.add('active');
   if(t==='today')rToday();else if(t==='timeline')rTimeline();else rProfile();
@@ -1380,6 +1406,7 @@ function cycSt(id){
   if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();else rProfile();
   showToast('→ '+nxt);
 }
+function setTodayFilter(k){ST.todayFilter=ST.todayFilter===k?'':k;rToday();}
 function dimB(){ST.banner=false;var b=document.getElementById('notif');if(b)b.classList.add('gone');}
 function togPh(id){ST.openPh[id]=!ST.openPh[id];var el=document.getElementById('acc-'+id);if(el)el.classList.toggle('open');}
 function togSt(k){if(k==='cal')ST.calSync=!ST.calSync;else ST.notif=!ST.notif;rProfile();}
