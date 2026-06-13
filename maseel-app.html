@@ -427,6 +427,7 @@ textarea::placeholder{color:var(--t3)}
 </div>
 <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none">
 <input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none">
+
 <!-- Safety timer runs before SheetJS CDN (must not block) -->
 <script>
 var _maseel_ready=0;
@@ -515,38 +516,9 @@ function clearOverrides(){
 function loadPhotos(){try{var d=localStorage.getItem('maseel_photos');return d?JSON.parse(d):{};}catch(e){return {};}}
 function savePhotos(p){try{localStorage.setItem('maseel_photos',JSON.stringify(p));}catch(e){}}
 function getPhoto(id){var p=loadPhotos();return p[id]||null;}
-function storePhoto(id, dataUrl){
-  var p=loadPhotos();p[id]=dataUrl;savePhotos(p);
-}
+function storePhoto(id, dataUrl){var p=loadPhotos();p[id]=dataUrl;savePhotos(p);}
 function removePhoto(id){var p=loadPhotos();delete p[id];savePhotos(p);}
-function attachPhoto(){
-  var el=document.getElementById('photo-input');
-  if(!el)return;
-  el.onchange=function(e){
-    var file=e.target.files[0];if(!file)return;
-    var reader=new FileReader();
-    reader.onload=function(ev){
-      var img=new Image();
-      img.onload=function(){
-        var max=800,c=document.createElement('canvas'),r=Math.min(max/img.width,max/img.height,1);
-        c.width=img.width*r;c.height=img.height*r;
-        var x=c.getContext('2d');x.drawImage(img,0,0,c.width,c.height);
-        var dataUrl=c.toDataURL('image/jpeg',0.7);
-        if(ST.selId)storePhoto(ST.selId,dataUrl);
-        showToast('✓ Photo attached');
-        rSheet();
-        el.value='';
-      };
-      img.src=ev.target.result;
-    };
-    reader.readAsDataURL(file);
-  };
-  el.click();
-}
-function rSheet(){
-  if(!ST.selId)return;
-  openSheet(ST.selId);
-}
+
 
 /* ══════════════════════════════════════════
    AUTH — Office 365 SSO (MSAL, optional)
@@ -1356,7 +1328,7 @@ function openSheet(id){
       '<textarea id="shno" placeholder="Add site notes…">'+escH(a.notes||(ST.overrides[a.id]?ST.overrides[a.id].notes:'')||'')+'</textarea></div>'+
     '<div class="sh-sec"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'+
       '<button class="ph-btn" onclick="attachPhoto()">📷 Photo</button>'+
-      (getPhoto(id)?'<span style="font-size:11px;color:var(--gr)">✓ Photo attached</span>':'')+
+      (getPhoto(id)?'<span style="font-size:11px;color:var(--gr)">✓ Photo taken</span>':'')+
     '</div>'+(getPhoto(id)?'<img src="'+getPhoto(id)+'" class="ph-thumb" onclick="showPhoto(this.src)">':'')+'</div>'+
     '<div class="sh-btns">'+
       '<button class="btn-cal idle-cal" id="bcal" onclick="addCal()">'+I.cal+'<span id="bcaltx"> Calendar</span></button>'+
@@ -1366,18 +1338,7 @@ function openSheet(id){
   var ov=document.getElementById('fov');if(ov)ov.classList.add('open');
   ST.selId=id;
 }
-function closeSheet(){var ov=document.getElementById('fov');if(ov)ov.classList.remove('open');try{var po=document.getElementById('ph-overlay');if(po)po.remove();}catch(e){}}
-function showPhoto(src){
-  var po=document.createElement('div');
-  po.id='ph-overlay';
-  po.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.9);z-index:1000;display:flex;align-items:center;justify-content:center;cursor:pointer';
-  po.onclick=function(){po.remove();};
-  var img=document.createElement('img');
-  img.src=src;
-  img.style.cssText='max-width:95%;max-height:95%;border-radius:12px;object-fit:contain';
-  po.appendChild(img);
-  document.body.appendChild(po);
-}
+function closeSheet(){var ov=document.getElementById('fov');if(ov)ov.classList.remove('open');var po=document.querySelector('div[style*="z-index:1000"]');if(po)po.remove();}
 function selSt(k,col){
   ST.shSt=k;
   var opts=document.querySelectorAll('.sopt');
@@ -1574,6 +1535,57 @@ async function saveSheet(id){
   var a=acOf(id);
   if(ST.shSt==='For Inspection')sendInspectionEmail(id, a?a.title:'');
   await saveToExcel(id, ST.shSt, ST.shPc, notes);
+}
+function attachPhoto(){
+  var el=document.getElementById('photo-input');
+  if(!el)return;
+  /* Request camera permission first */
+  if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia){
+    navigator.mediaDevices.getUserMedia({video:true}).then(function(){
+      el.setAttribute('capture','environment');
+      el.click();
+    }).catch(function(err){
+      if(err.name==='NotAllowedError'||err.name==='PermissionDeniedError'){
+        showToast('Camera permission denied — tap OK to pick from gallery');
+        el.removeAttribute('capture');
+        el.click();
+      }else{
+        showToast('Camera unavailable — picking from gallery');
+        el.removeAttribute('capture');
+        el.click();
+      }
+    });
+  }else{
+    el.click();
+  }
+  el.onchange=function(e){
+    var file=e.target.files[0];if(!file)return;
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      var img=new Image();
+      img.onload=function(){
+        var max=800,c=document.createElement('canvas'),r=Math.min(max/img.width,max/img.height,1);
+        c.width=img.width*r;c.height=img.height*r;
+        var x=c.getContext('2d');x.drawImage(img,0,0,c.width,c.height);
+        var dataUrl=c.toDataURL('image/jpeg',0.7);
+        if(ST.selId){storePhoto(ST.selId,dataUrl);showToast('✓ Photo attached');rSheet();}
+        el.value='';
+      };
+      img.src=ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+}
+function rSheet(){if(ST.selId)openSheet(ST.selId);}
+function showPhoto(src){
+  var po=document.createElement('div');
+  po.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.95);z-index:1000;display:flex;align-items:center;justify-content:center;cursor:pointer';
+  po.onclick=function(){po.remove();};
+  var img=document.createElement('img');
+  img.src=src;
+  img.style.cssText='max-width:95%;max-height:95%;border-radius:12px;object-fit:contain';
+  po.appendChild(img);
+  document.body.appendChild(po);
 }
 
 /* ══════════════════════════════════════════
