@@ -1365,7 +1365,7 @@ function openSheet(id){
     '</div>'+
     '<div class="sh-sec"><div class="sh-sl">Inspection Notes</div>'+
       '<textarea id="shno" placeholder="Add site notes…">'+escH(a.notes||(ST.overrides[a.id]?ST.overrides[a.id].notes:'')||'')+'</textarea></div>'+
-    inspSection(id)+
+    '<div id="insp-container">'+inspSection(id)+'</div>'+
     '<div class="sh-sec"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'+
       '<button class="ph-btn" onclick="attachPhoto()">📷 Photo</button>'+
       (getPhoto(id)?'<span style="font-size:11px;color:var(--gr)">✓ Photo taken</span>':'')+
@@ -1388,6 +1388,8 @@ function selSt(k,col){
     var r=opts[i].querySelector('.so-radio');
     if(r)r.innerHTML=keys[i]===k?'<div style="width:7px;height:7px;border-radius:50%;background:'+cols[i]+'"></div>':'';
   }
+  var ic=document.getElementById('insp-container');
+  if(ic&&ST.selId)ic.innerHTML=inspSection(ST.selId);
 }
 function updPc(v){ST.shPc=+v;var n=document.getElementById('pnum'),f=document.getElementById('ptf');if(n)n.textContent=v+'%';if(f)f.style.width=v+'%';}
 function addCal(){ST.calAdded=true;var b=document.getElementById('bcal');if(b){b.className='btn-cal done-cal';b.innerHTML=I.chkK+'<span> Added!</span>';}showToast('Added to calendar ✓');}
