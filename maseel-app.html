@@ -1703,25 +1703,7 @@ async function sendReadyEmail(id,title){
 function attachPhoto(){
   var el=document.getElementById('photo-input');
   if(!el)return;
-  /* Request camera permission first */
-  if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia){
-    navigator.mediaDevices.getUserMedia({video:true}).then(function(){
-      el.setAttribute('capture','environment');
-      el.click();
-    }).catch(function(err){
-      if(err.name==='NotAllowedError'||err.name==='PermissionDeniedError'){
-        showToast('Camera permission denied — tap OK to pick from gallery');
-        el.removeAttribute('capture');
-        el.click();
-      }else{
-        showToast('Camera unavailable — picking from gallery');
-        el.removeAttribute('capture');
-        el.click();
-      }
-    });
-  }else{
-    el.click();
-  }
+  el.click();
   el.onchange=function(e){
     var file=e.target.files[0];if(!file)return;
     var reader=new FileReader();
