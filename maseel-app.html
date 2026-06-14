@@ -916,12 +916,6 @@ async function fetchLive() {
         if(res.ok){buf=await res.arrayBuffer();source='SharePoint';}
       } catch(e3){}
     }
-    if(!source){
-      try {
-        var res = await fetch(GH_DL_URL, {signal: controller ? controller.signal : undefined});
-        if(res.ok){buf=await res.arrayBuffer();source='GitHub';}
-      } catch(e){}
-    }
     if (tid) clearTimeout(tid);
     if (!source) throw new Error('Could not fetch schedule file');
 
