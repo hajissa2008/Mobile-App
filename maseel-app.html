@@ -1648,7 +1648,13 @@ async function sendInspectionEmail(id,title){
       body+= (hh.r==='Passed'?'✓':'✗')+' '+hh.q+' — '+pad(hd.getDate())+'/'+pad(hd.getMonth()+1)+' '+pad(hd.getHours())+':'+pad(hd.getMinutes())+'<br>';
     }
   }else{body+='No inspection entries yet<br>';}
-  var payload={message:{subject:'Inspection Required: '+escH(title||id),body:{contentType:'HTML',content:body},toRecipients:[{emailAddress:{address:NOTIFY_EMAIL}}]},saveToSentItems:true};
+  var msg={subject:'Inspection Required: '+escH(title||id),body:{contentType:'HTML',content:body},toRecipients:[{emailAddress:{address:NOTIFY_EMAIL}}]};
+  var photo=getPhoto(id);
+  if(photo){
+    var parts=photo.split(','),mime=parts[0].split(':')[1].split(';')[0]||'image/jpeg';
+    msg.attachments=[{'@odata.type':'#microsoft.graph.fileAttachment',name:'photo.'+(mime.split('/')[1]||'jpg'),contentBytes:parts[1],contentType:mime}];
+  }
+  var payload={message:msg,saveToSentItems:true};
   try{
     var res=await fetch('https://graph.microsoft.com/v1.0/me/sendMail',{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(payload)});
     if(res.ok)showToast('✓ Email sent to '+NOTIFY_EMAIL);
@@ -1661,7 +1667,13 @@ async function sendReadyEmail(id,title){
   var a=acOf(id),ins=inspQty(id);
   var body='<b>Task:</b> '+escH(title||id)+'<br><b>ID:</b> '+id+'<br><b>Inspected Qty:</b> '+ins+' '+(a&&a.unit||'')+
     '<br><br>The inspected quantity is ready and WIR to be issued from Aconex for SDC inspection.';
-  var payload={message:{subject:'Ready for SDC Inspection: '+escH(title||id),body:{contentType:'HTML',content:body},toRecipients:[{emailAddress:{address:NOTIFY_EMAIL}}]},saveToSentItems:true};
+  var msg={subject:'Ready for SDC Inspection: '+escH(title||id),body:{contentType:'HTML',content:body},toRecipients:[{emailAddress:{address:NOTIFY_EMAIL}}]};
+  var photo=getPhoto(id);
+  if(photo){
+    var parts=photo.split(','),mime=parts[0].split(':')[1].split(';')[0]||'image/jpeg';
+    msg.attachments=[{'@odata.type':'#microsoft.graph.fileAttachment',name:'photo.'+(mime.split('/')[1]||'jpg'),contentBytes:parts[1],contentType:mime}];
+  }
+  var payload={message:msg,saveToSentItems:true};
   try{
     var res=await fetch('https://graph.microsoft.com/v1.0/me/sendMail',{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(payload)});
   }catch(e){}
