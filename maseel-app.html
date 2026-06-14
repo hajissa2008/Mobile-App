@@ -525,7 +525,7 @@ function addIns(id,qty,result){
   if(!ST.overrides[id].ins)ST.overrides[id].ins=[];
   ST.overrides[id].ins.push({q:qty,r:result,d:new Date().toISOString()});
   saveOverrides();
-  var a=acOf(id),tot=a?a.totalQty:0,ins=inspQty(id);
+  var a=acOf(id),tot=a?a.totalQty||readyQty(id):0,ins=inspQty(id);
   if(tot>0&&ins>0){
     if(ins>=tot){ST.overrides[id].st='Done';ST.overrides[id].pc=100;showToast('✓ All quantity inspected — status set to Done');}
     else{ST.overrides[id].st='Partially Inspected';ST.overrides[id].pc=Math.round(ins/tot*100);showToast('! Partially inspected — status updated');}
@@ -1464,7 +1464,7 @@ function updateReadyQty(id){
   if(!ST.overrides[id])ST.overrides[id]={};
   ST.overrides[id].readyQty=v;
   saveOverrides();
-  var a=acOf(id),tot=a?a.totalQty:0,ins=inspQty(id);
+  var a=acOf(id),tot=a?a.totalQty||readyQty(id):0,ins=inspQty(id);
   if(tot>0&&ins>0){
     if(ins>=tot){ST.overrides[id].st='Done';ST.overrides[id].pc=100;showToast('✓ All quantity inspected — status set to Done');}
     else{ST.overrides[id].st='Partially Inspected';ST.overrides[id].pc=Math.round(ins/tot*100);showToast('! Partially inspected — status updated');}
@@ -1623,7 +1623,7 @@ async function saveSheet(id){
   if(getPhoto(id)&&notes.indexOf('📷')<0)notes='📷 Photo attached\n'+notes;
   if(!ST.overrides[id])ST.overrides[id]={};
   ST.overrides[id].st=ST.shSt;ST.overrides[id].pc=ST.shPc;ST.overrides[id].notes=notes;
-  var a=acOf(id),tot=a?a.totalQty:0,ins=inspQty(id);
+  var a=acOf(id),tot=a?a.totalQty||readyQty(id):0,ins=inspQty(id);
   if(tot>0&&ins>0){
     if(ins>=tot){ST.overrides[id].st='Done';ST.overrides[id].pc=100;}
     else{ST.overrides[id].st='Partially Inspected';ST.overrides[id].pc=Math.round(ins/tot*100);}
