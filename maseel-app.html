@@ -1624,7 +1624,7 @@ async function saveSheet(id){
   if(!ST.overrides[id])ST.overrides[id]={};
   ST.overrides[id].st=ST.shSt;ST.overrides[id].pc=ST.shPc;ST.overrides[id].notes=notes;
   var a=acOf(id),tot=a?a.totalQty:0,ins=inspQty(id);
-  if(ST.shSt==='For Inspection'&&tot>0&&ins>0){
+  if(tot>0&&ins>0){
     if(ins>=tot){ST.overrides[id].st='Done';ST.overrides[id].pc=100;}
     else{ST.overrides[id].st='Partially Inspected';ST.overrides[id].pc=Math.round(ins/tot*100);}
   }
