@@ -621,6 +621,22 @@ async function uploadViaGraph(buf){
     return res.ok;
   }catch(e){return false;}
 }
+async function fetchViaGraphRetry(retries){
+  for(var i=0;i<retries;i++){
+    var buf=await fetchViaGraph();
+    if(buf)return buf;
+    if(i<retries-1)await new Promise(function(r){setTimeout(r,2000*(i+1));});
+  }
+  return null;
+}
+async function uploadViaGraphRetry(buf, retries){
+  for(var i=0;i<retries;i++){
+    var ok=await uploadViaGraph(buf);
+    if(ok)return true;
+    if(i<retries-1)await new Promise(function(r){setTimeout(r,2000*(i+1));});
+  }
+  return false;
+}
 
 function loadAuth(){
   try{
@@ -1650,16 +1666,17 @@ async function sendInspectionEmail(id,title){
   }else{body+='No inspection entries yet<br>';}
   var msg={subject:'Inspection Required: '+escH(title||id),body:{contentType:'HTML',content:body},toRecipients:[{emailAddress:{address:NOTIFY_EMAIL}}]};
   var photo=getPhoto(id);
+  console.log('[mail] sendInspection getPhoto('+id+'):',photo?'found ('+photo.length+' chars)':'null');
   if(photo){
     var parts=photo.split(','),mime=parts[0].split(':')[1].split(';')[0]||'image/jpeg';
-    msg.attachments=[{'@odata.type':'#microsoft.graph.fileAttachment',name:'photo.'+(mime.split('/')[1]||'jpg'),contentBytes:parts[1],contentType:mime}];
+    msg.attachments=[{'@odata.type':'#microsoft.graph.fileAttachment',name:'photo.'+(mime.split('/')[1]||'jpg'),contentBytes:parts[1].replace(/\s/g,''),contentType:mime}];
   }
   var payload={message:msg,saveToSentItems:true};
   try{
     var res=await fetch('https://graph.microsoft.com/v1.0/me/sendMail',{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    if(res.ok)showToast('✓ Email sent to '+NOTIFY_EMAIL);
-    else showToast('Failed to send email');
-  }catch(e){showToast('Failed to send email');}
+    if(res.ok)showToast('✓ Email sent to '+NOTIFY_EMAIL+(photo?' with photo':''));
+    else{var et=await res.text();console.log('[mail] send error:',res.status,et);showToast('Failed to send email');}
+  }catch(e){console.log('[mail] fetch error:',e);showToast('Failed to send email');}
 }
 async function sendReadyEmail(id,title){
   var token=await getMailToken();
@@ -1669,14 +1686,19 @@ async function sendReadyEmail(id,title){
     '<br><br>The inspected quantity is ready and WIR to be issued from Aconex for SDC inspection.';
   var msg={subject:'Ready for SDC Inspection: '+escH(title||id),body:{contentType:'HTML',content:body},toRecipients:[{emailAddress:{address:NOTIFY_EMAIL}}]};
   var photo=getPhoto(id);
+  console.log('[mail] getPhoto('+id+'):',photo?'found ('+photo.length+' chars)':'null');
   if(photo){
     var parts=photo.split(','),mime=parts[0].split(':')[1].split(';')[0]||'image/jpeg';
-    msg.attachments=[{'@odata.type':'#microsoft.graph.fileAttachment',name:'photo.'+(mime.split('/')[1]||'jpg'),contentBytes:parts[1],contentType:mime}];
+    var cleanBytes=parts[1].replace(/\s/g,'');
+    console.log('[mail] attachment parts[0]:',parts[0],'mime:',mime,'bytes len:',cleanBytes.length);
+    msg.attachments=[{'@odata.type':'#microsoft.graph.fileAttachment',name:'photo.'+(mime.split('/')[1]||'jpg'),contentBytes:cleanBytes,contentType:mime}];
   }
   var payload={message:msg,saveToSentItems:true};
   try{
     var res=await fetch('https://graph.microsoft.com/v1.0/me/sendMail',{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(payload)});
-  }catch(e){}
+    if(res.ok)showToast('✓ Ready email sent'+(photo?' with photo':''));
+    else{var et=await res.text();console.log('[mail] send error:',res.status,et);showToast('Failed to send ready email');}
+  }catch(e){console.log('[mail] fetch error:',e);showToast('Failed to send ready email');}
 }
 function attachPhoto(){
   var el=document.getElementById('photo-input');
