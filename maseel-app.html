@@ -527,8 +527,8 @@ function addIns(id,qty,result){
   saveOverrides();
   var a=acOf(id),tot=a?a.totalQty:0,ins=inspQty(id);
   if(tot>0&&ins>0){
-    if(ins>=tot){ST.overrides[id].st='Done';ST.overrides[id].pc=100;showToast('✓ All quantity inspected — status set to Done');sendReadyEmail(id,a?a.title:'');}
-    else{ST.overrides[id].st='Partially Inspected';ST.overrides[id].pc=Math.round(ins/tot*100);showToast('! Partially inspected — status updated');sendReadyEmail(id,a?a.title:'');}
+    if(ins>=tot){ST.overrides[id].st='Done';ST.overrides[id].pc=100;showToast('✓ All quantity inspected — status set to Done');}
+    else{ST.overrides[id].st='Partially Inspected';ST.overrides[id].pc=Math.round(ins/tot*100);showToast('! Partially inspected — status updated');}
     saveOverrides();
   }
 }
@@ -1470,8 +1470,8 @@ function updateReadyQty(id){
   saveOverrides();
   var a=acOf(id),tot=a?a.totalQty:0,ins=inspQty(id);
   if(tot>0&&ins>0){
-    if(ins>=tot){ST.overrides[id].st='Done';ST.overrides[id].pc=100;showToast('✓ All quantity inspected — status set to Done');sendReadyEmail(id,a?a.title:'');}
-    else{ST.overrides[id].st='Partially Inspected';ST.overrides[id].pc=Math.round(ins/tot*100);showToast('! Partially inspected — status updated');sendReadyEmail(id,a?a.title:'');}
+    if(ins>=tot){ST.overrides[id].st='Done';ST.overrides[id].pc=100;showToast('✓ All quantity inspected — status set to Done');}
+    else{ST.overrides[id].st='Partially Inspected';ST.overrides[id].pc=Math.round(ins/tot*100);showToast('! Partially inspected — status updated');}
     saveOverrides();
   }else{showToast('✓ Ready quantity set to '+v);}
   openSheet(id);
@@ -1796,8 +1796,6 @@ function cycSt(id){
   saveOverrides();ST.syncQ++;updBadge();
   if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();else rProfile();
   showToast('→ '+nxt);
-  if(nxt==='For Inspection')sendInspectionEmail(id, a.title);
-  else if(nxt==='Partially Inspected'||nxt==='Done')sendReadyEmail(id, a.title);
 }
 function setTodayFilter(k){ST.todayFilter=ST.todayFilter===k?'':k;rToday();}
 function dimB(){ST.banner=false;var b=document.getElementById('notif');if(b)b.classList.add('gone');}
