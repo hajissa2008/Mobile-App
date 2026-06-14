@@ -1384,8 +1384,8 @@ function openSheet(id){
     '<div id="insp-container">'+inspSection(id)+'</div>'+
     '<div class="sh-sec"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'+
       '<button class="ph-btn" onclick="attachPhoto()">📷 Photo</button>'+
-      (getPhoto(id)?'<span style="font-size:11px;color:var(--gr)">✓ Photo taken</span>':'')+
-    '</div>'+(getPhoto(id)?'<img src="'+getPhoto(id)+'" class="ph-thumb" onclick="showPhoto(this.src)">':'')+'</div>'+
+      (getPhoto(id)?'<span style="font-size:11px;color:var(--gr);cursor:pointer;text-decoration:underline" onclick="showPhoto(\''+getPhoto(id)+'\')">photo.jpeg</span>':'')+
+    '</div></div>'+
     '<div class="sh-btns">'+
       '<button class="btn-cal idle-cal" id="bcal" onclick="addCal()">'+I.cal+'<span id="bcaltx"> Calendar</span></button>'+
       '<button class="btn-save" onclick="saveSheet(\''+id+'\')">'+I.chkK+' Save Changes</button>'+
