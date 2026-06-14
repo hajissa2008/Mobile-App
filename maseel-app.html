@@ -1619,6 +1619,40 @@ async function saveSheet(id){
   if(ST.shSt==='For Inspection')sendInspectionEmail(id, a?a.title:'');
   await saveToExcel(id, ST.shSt, ST.shPc, notes);
 }
+async function getMailToken(){
+  if(!AUTH.instance||!AUTH.user)return null;
+  try{
+    var resp=await AUTH.instance.acquireTokenSilent({scopes:[MAIL_SCOPE],account:AUTH.user});
+    return resp.accessToken;
+  }catch(e){
+    console.log('[mail] silent failed',e);
+    try{
+      var resp=await AUTH.instance.acquireTokenPopup({scopes:[MAIL_SCOPE],account:AUTH.user});
+      return resp.accessToken;
+    }catch(e2){console.log('[mail] popup failed',e2);return null;}
+  }
+}
+async function sendInspectionEmail(id,title){
+  var token=await getMailToken();
+  if(!token){showToast('Sign in to send email');return;}
+  var a=acOf(id),tot=a?a.totalQty||0:0,ins=inspQty(id),rq=readyQty(id);
+  var dateStr=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  var body='<b>Task:</b> '+escH(title||id)+'<br><b>ID:</b> '+id+'<br><b>Date:</b> '+dateStr+'<br><br><b>Inspection Quantity</b><br>'+
+    'Total: '+tot+' '+(a&&a.unit||'')+'<br>Ready: '+rq+'<br>Inspected: '+ins+'<br>Remaining: '+Math.max(0,rq-ins)+'<br><br><b>Inspection History</b><br>';
+  var hist=ST.overrides[id]&&ST.overrides[id].ins?ST.overrides[id].ins:[];
+  if(hist.length){
+    for(var hi=0;hi<hist.length;hi++){
+      var hh=hist[hi];var hd=new Date(hh.d);
+      body+= (hh.r==='Passed'?'✓':'✗')+' '+hh.q+' — '+pad(hd.getDate())+'/'+pad(hd.getMonth()+1)+' '+pad(hd.getHours())+':'+pad(hd.getMinutes())+'<br>';
+    }
+  }else{body+='No inspection entries yet<br>';}
+  var payload={message:{subject:'Inspection Required: '+escH(title||id),body:{contentType:'HTML',content:body},toRecipients:[{emailAddress:{address:NOTIFY_EMAIL}}]},saveToSentItems:true};
+  try{
+    var res=await fetch('https://graph.microsoft.com/v1.0/me/sendMail',{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if(res.ok)showToast('✓ Email sent to '+NOTIFY_EMAIL);
+    else showToast('Failed to send email');
+  }catch(e){showToast('Failed to send email');}
+}
 function attachPhoto(){
   var el=document.getElementById('photo-input');
   if(!el)return;
