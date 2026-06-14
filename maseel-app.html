@@ -527,8 +527,8 @@ function addIns(id,qty,result){
   saveOverrides();
   var a=acOf(id),tot=a?a.totalQty:0,ins=inspQty(id);
   if(tot>0&&ins>0){
-    if(ins>=tot){ST.overrides[id].st='Done';ST.overrides[id].pc=100;showToast('✓ All quantity inspected — status set to Done');}
-    else{ST.overrides[id].st='Partially Inspected';ST.overrides[id].pc=Math.round(ins/tot*100);showToast('! Partially inspected — status updated');}
+    if(ins>=tot){ST.overrides[id].st='Done';ST.overrides[id].pc=100;showToast('✓ All quantity inspected — status set to Done');sendReadyEmail(id,a?a.title:'');}
+    else{ST.overrides[id].st='Partially Inspected';ST.overrides[id].pc=Math.round(ins/tot*100);showToast('! Partially inspected — status updated');sendReadyEmail(id,a?a.title:'');}
     saveOverrides();
   }
 }
@@ -1454,8 +1454,8 @@ function updateReadyQty(id){
   saveOverrides();
   var a=acOf(id),tot=a?a.totalQty:0,ins=inspQty(id);
   if(tot>0&&ins>0){
-    if(ins>=tot){ST.overrides[id].st='Done';ST.overrides[id].pc=100;showToast('✓ All quantity inspected — status set to Done');}
-    else{ST.overrides[id].st='Partially Inspected';ST.overrides[id].pc=Math.round(ins/tot*100);showToast('! Partially inspected — status updated');}
+    if(ins>=tot){ST.overrides[id].st='Done';ST.overrides[id].pc=100;showToast('✓ All quantity inspected — status set to Done');sendReadyEmail(id,a?a.title:'');}
+    else{ST.overrides[id].st='Partially Inspected';ST.overrides[id].pc=Math.round(ins/tot*100);showToast('! Partially inspected — status updated');sendReadyEmail(id,a?a.title:'');}
     saveOverrides();
   }else{showToast('✓ Ready quantity set to '+v);}
   openSheet(id);
@@ -1616,7 +1616,9 @@ async function saveSheet(id){
   }
   saveOverrides();ST.syncQ++;updBadge();closeSheet();
   if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();
-  if(ST.shSt==='For Inspection')sendInspectionEmail(id, a?a.title:'');
+  var finalSt=ST.overrides[id].st;
+  if(finalSt==='For Inspection')sendInspectionEmail(id, a?a.title:'');
+  else if(finalSt==='Partially Inspected'||finalSt==='Done')sendReadyEmail(id, a?a.title:'');
   await saveToExcel(id, ST.shSt, ST.shPc, notes);
 }
 async function getMailToken(){
@@ -1652,6 +1654,17 @@ async function sendInspectionEmail(id,title){
     if(res.ok)showToast('✓ Email sent to '+NOTIFY_EMAIL);
     else showToast('Failed to send email');
   }catch(e){showToast('Failed to send email');}
+}
+async function sendReadyEmail(id,title){
+  var token=await getMailToken();
+  if(!token)return;
+  var a=acOf(id),ins=inspQty(id);
+  var body='<b>Task:</b> '+escH(title||id)+'<br><b>ID:</b> '+id+'<br><b>Inspected Qty:</b> '+ins+' '+(a&&a.unit||'')+
+    '<br><br>The inspected quantity is ready and WIR to be issued from Aconex for SDC inspection.';
+  var payload={message:{subject:'Ready for SDC Inspection: '+escH(title||id),body:{contentType:'HTML',content:body},toRecipients:[{emailAddress:{address:NOTIFY_EMAIL}}]},saveToSentItems:true};
+  try{
+    var res=await fetch('https://graph.microsoft.com/v1.0/me/sendMail',{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  }catch(e){}
 }
 function attachPhoto(){
   var el=document.getElementById('photo-input');
@@ -1750,6 +1763,7 @@ function cycSt(id){
   if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();else rProfile();
   showToast('→ '+nxt);
   if(nxt==='For Inspection')sendInspectionEmail(id, a.title);
+  else if(nxt==='Partially Inspected'||nxt==='Done')sendReadyEmail(id, a.title);
 }
 function setTodayFilter(k){ST.todayFilter=ST.todayFilter===k?'':k;rToday();}
 function dimB(){ST.banner=false;var b=document.getElementById('notif');if(b)b.classList.add('gone');}
