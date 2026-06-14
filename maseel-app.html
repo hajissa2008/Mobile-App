@@ -1457,6 +1457,8 @@ function recordIns(id,result){
   if(remQty(id)<q){showToast('Cannot inspect more than remaining qty');return;}
   addIns(id,q,result);
   showToast('✓ '+q+' inspected ('+result+')');
+  ST.syncQ++;updBadge();
+  if(!ST._syncTimer)ST._syncTimer=setTimeout(function(){ST._syncTimer=null;syncAll();},5000);
   openSheet(id);
   if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();
 }
@@ -1474,6 +1476,8 @@ function updateReadyQty(id){
     else{ST.overrides[id].st='Partially Inspected';ST.overrides[id].pc=Math.round(ins/tot*100);showToast('! Partially inspected — status updated');}
     saveOverrides();
   }else{showToast('✓ Ready quantity set to '+v);}
+  ST.syncQ++;updBadge();
+  if(!ST._syncTimer)ST._syncTimer=setTimeout(function(){ST._syncTimer=null;syncAll();},5000);
   openSheet(id);
   if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();
 }
@@ -1632,10 +1636,11 @@ async function saveSheet(id){
   }
   saveOverrides();ST.syncQ++;updBadge();closeSheet();
   if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();
-  var finalSt=ST.overrides[id].st;
+  var finalSt=ST.overrides[id].st,finalPc=ST.overrides[id].pc;
   if(finalSt==='For Inspection')sendInspectionEmail(id, a?a.title:'');
   else if(finalSt==='Partially Inspected'||finalSt==='Done')sendReadyEmail(id, a?a.title:'');
-  await saveToExcel(id, ST.shSt, ST.shPc, notes);
+  await saveToExcel(id, finalSt, finalPc, notes);
+  if(ST.syncQ>0)setTimeout(syncAll,3000);
 }
 async function getMailToken(){
   if(!AUTH.instance||!AUTH.user)return null;
