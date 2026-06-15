@@ -604,7 +604,7 @@ async function fetchViaGraph(){
   var token = await getGraphToken();
   if(!token)return null;
   try{
-    var res = await fetch(graphContentUrl(), {headers:{'Authorization':'Bearer '+token}});
+    var res = await fetch(graphContentUrl()+'?cb='+Date.now(), {headers:{'Authorization':'Bearer '+token}});
     if(!res.ok)return null;
     return await res.arrayBuffer();
   }catch(e){return null;}
@@ -913,6 +913,7 @@ function setLoadMsg(msg, pct) {
 }
 
 async function fetchLive() {
+  var hadLive = DS.state === 'live';
   DS.state='loading'; DS.msg='Connecting to SharePoint…';
   setLoadMsg('Connecting to SharePoint…', 20);
 
@@ -922,6 +923,7 @@ async function fetchLive() {
 
     setLoadMsg('Downloading schedule file…', 40);
     var buf, source='';
+    var cb='?_='+Date.now();
     /* Try Graph API first (requires MSAL + Files.ReadWrite.All) */
     if(AUTH.user){
       var gBuf = await fetchViaGraph();
@@ -931,7 +933,7 @@ async function fetchLive() {
       try {
         var controller2 = typeof AbortController!=='undefined' ? new AbortController() : null;
         var tid2 = controller2 ? setTimeout(function(){controller2.abort();}, 15000) : null;
-        var res = await fetch(SP_DL_URL, {signal: controller2 ? controller2.signal : undefined});
+        var res = await fetch(SP_DL_URL+cb, {signal: controller2 ? controller2.signal : undefined});
         if(tid2)clearTimeout(tid2);
         if(res.ok){buf=await res.arrayBuffer();source='SharePoint';}
       } catch(e3){}
@@ -956,15 +958,19 @@ async function fetchLive() {
     setLoadMsg('Schedule loaded ✓', 100);
 
   } catch(err) {
-    /* Fall back to embedded cached data */
-    PH = PH_FALLBACK.slice();
-    AC = AC_FALLBACK.slice();
+    /* On error, keep existing live data if we had it; otherwise fall back to cached */
+    if(!hadLive){
+      PH = PH_FALLBACK.slice();
+      AC = AC_FALLBACK.slice();
+      DS.acts=AC.length;
+      DS.ts='3 Jun 2026';
+    } else {
+      DS.acts = AC.length;
+    }
     DS.state='cached';
-    DS.acts=AC.length;
-    DS.ts='3 Jun 2026';
     DS.error=err.message||'Fetch failed';
-    DS.msg='Using cached schedule · '+DATA_DATE+(AUTH.user?' · live unavailable':'');
-    setLoadMsg('Using cached data', 100);
+    DS.msg='Using '+(hadLive?'previous live':'cached')+' schedule · '+DATA_DATE+(AUTH.user?' · live unavailable':'');
+    setLoadMsg('Using '+(hadLive?'previous data':'cached data'), 100);
   }
 }
 
@@ -982,11 +988,9 @@ async function silentRefresh() {
   var wasCached = DS.state === 'cached';
   var oldLen = AC.length;
   await fetchLive();
-  if (DS.state === 'live') {
-    rToday(); rTimeline(); rProfile();
-    if (wasCached || AC.length !== oldLen) {
-      showToast('✓ Schedule updated');
-    }
+  rToday(); rTimeline(); rProfile();
+  if (DS.state !== 'loading' && (wasCached || AC.length !== oldLen)) {
+    showToast(DS.state==='live'?'✓ Schedule updated':'Cached');
   }
   LAST_CHECK = Date.now();
 }
@@ -1998,12 +2002,12 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register('sw.js').catch(
     hideLoginScreen();
   }
 
-  /* Auto-poll every 5 minutes */
-  setInterval(silentRefresh, 300000);
+  /* Auto-poll every 60 seconds */
+  setInterval(silentRefresh, 60000);
 
-  /* Refresh when tab becomes visible again (if >2 min since last check) */
+  /* Refresh when tab becomes visible again (if >30s since last check) */
   document.addEventListener('visibilitychange', function() {
-    if (!document.hidden && Date.now() - LAST_CHECK > 120000) {
+    if (!document.hidden && Date.now() - LAST_CHECK > 30000) {
       silentRefresh();
     }
   });
