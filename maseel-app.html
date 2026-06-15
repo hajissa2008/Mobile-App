@@ -477,7 +477,6 @@ var FILE_NAME    = 'EMSL-15-P6 Update 3-Jun-2026 G.xlsx';
 var DATA_DATE    = '2026-06-03';
 var SP_SHARE_URL = 'https://sascontractingsa-my.sharepoint.com/:x:/g/personal/m_hajissa_alenshaiah_com/IQBWPlRlHWXfRaDvQFQ_KwqwAev8f2TofrG6dDr2S7g3KVc?e=FdWMQt';
 var SP_DL_URL    = SP_SHARE_URL + '&download=1';
-var GH_DL_URL    = 'https://raw.githubusercontent.com/hajissa2008/Mobile-App/main/' + encodeURIComponent(FILE_NAME);
 
 /* ══════════════════════════════════════════
    EMBEDDED FALLBACK DATA  (extracted 3-Jun-2026)
@@ -915,12 +914,6 @@ async function fetchLive() {
         var res = await fetch(SP_DL_URL, {credentials:'include', signal: controller ? controller.signal : undefined});
         if(res.ok){buf=await res.arrayBuffer();source='SharePoint';}
       } catch(e3){}
-    }
-    if(!source){
-      try {
-        var res2 = await fetch(GH_DL_URL, {signal: controller ? controller.signal : undefined});
-        if(res2.ok){buf=await res2.arrayBuffer();source='GitHub';}
-      } catch(e4){}
     }
     if (tid) clearTimeout(tid);
     if (!source) throw new Error('Could not fetch schedule file');
