@@ -385,7 +385,7 @@ textarea::placeholder{color:var(--t3)}
     </svg>
   </div>
   <div class="ls-name">Alenshaiah</div>
-  <div class="ls-sub">Maseel Schedule · EMSL-15</div>
+  <div class="ls-sub">EMSL-15 P6 · Update 3 Jun 2026</div>
   <button class="ls-btn" onclick="loginMsal()" id="ls-btn">
     <svg width="18" height="18" viewBox="0 0 21 21" fill="none"><rect x="1" y="1" width="9" height="9" fill="#F25022"/><rect x="11" y="1" width="9" height="9" fill="#7FBA00"/><rect x="1" y="11" width="9" height="9" fill="#00A4EF"/><rect x="11" y="11" width="9" height="9" fill="#FFB900"/></svg>
     Sign in with Microsoft
@@ -417,7 +417,7 @@ textarea::placeholder{color:var(--t3)}
 </div>
 <div class="loading" id="loading">
   <div class="ld-logo">M</div>
-  <div class="ld-title">Maseel Schedule</div>
+  <div class="ld-title">EMSL-15 P6</div>
   <div class="ld-sub" id="ld-msg">Connecting to SharePoint…</div>
   <div class="ld-bar"><div class="ld-fill" id="ld-fill"></div>  </div>
 </div>
@@ -475,8 +475,8 @@ _maseel_ready = 1;
 ══════════════════════════════════════════ */
 var FILE_NAME    = 'EMSL-15-P6 Update 3-Jun-2026 G.xlsx';
 var DATA_DATE    = '2026-06-03';
-var SP_SHARE_URL = 'https://sascontractingsa-my.sharepoint.com/:x:/g/personal/m_hajissa_alenshaiah_com/IQBWPlRlHWXfRaDvQFQ_KwqwAev8f2TofrG6dDr2S7g3KVc?e=FdWMQt';
-var SP_DL_URL    = SP_SHARE_URL + '&download=1';
+var SP_SHARE_URL = 'https://sascontractingsa.sharepoint.com/sites/Alenshaiah';
+var SP_LIST_URL  = 'https://sascontractingsa.sharepoint.com/:l:/s/Alenshaiah/JADTaPVa2_dMRbjaGE50d5mjAZ8Iv9JsP2DAd2G1dFjN3Gc?e=ntnnLn';
 
 /* ══════════════════════════════════════════
    EMBEDDED FALLBACK DATA  (extracted 3-Jun-2026)
@@ -546,22 +546,12 @@ function removePhoto(id){var p=loadPhotos();delete p[id];savePhotos(p);}
 var AUTH = {enabled:false, clientId:'', tenantId:'', user:null, instance:null, _profile:'', _cfg:null, graphToken:null, graphTokenExp:0};
 var GRAPH_SCOPE = 'https://graph.microsoft.com/Sites.ReadWrite.All';
 var MAIL_SCOPE = 'https://graph.microsoft.com/Mail.Send';
-var GRAPH_SHARE_BASE = 'https://graph.microsoft.com/v1.0/shares/';
 var GRAPH_SITES_BASE = 'https://graph.microsoft.com/v1.0/sites/';
-var LIST_NAME = 'Maseel Schedule';
+var LIST_NAME = 'EMSL15P6 Update 3Jun2026 G 7';
 var NOTIFY_EMAIL = 'm.hajissa@alenshaiah.com';
 var INSPECT_EMAIL = 'h.shehata@alenshaiah.com';
 var ADMIN_EMAILS = ['m.hajissa@alenshaiah.com'];
 var INSPECTOR_EMAILS = ['h.shehata@alenshaiah.com'];
-
-function shareUrlToEncoded(url){
-  var u = url.split('?')[0];
-  var bytes = new TextEncoder().encode(u);
-  var binary = '';
-  for(var i=0;i<bytes.length;i++) binary += String.fromCharCode(bytes[i]);
-  var b = btoa(binary).replace(/=+$/,'').replace(/\+/g,'-').replace(/\//g,'_');
-  return 'u!' + b;
-}
 
 async function getGraphToken(){
   if(!AUTH.instance||!AUTH.user)return null;
@@ -584,17 +574,16 @@ async function getGraphToken(){
 ══════════════════════════════════════════ */
 var SITE_ID = null;
 var SCHED_LIST_ID = null;
-var PHASE_LIST_ID = null;
 
-/* Parse the SharePoint site hostname and path from the share URL */
+/* Parse the SharePoint site hostname and path from the site URL */
 function siteInfoFromShareUrl(url){
   try{
     var u=new URL(url);
-    /* For OneDrive: https://{tenant}-my.sharepoint.com/:x:/g/{path} */
     var host=u.hostname;
-    /* Remove /:x:/... prefix to get the site path */
-    var path='/'+u.pathname.split('/').slice(2).filter(function(s){return s&&!s.startsWith(':')&&s!=='g'&&s!=='r'&&s!=='f';}).join('/').split('/').slice(0,-1).join('/');
-    /* For personal sites, path is /personal/{email} */
+    /* Extract site-relative path e.g. /sites/Alenshaiah */
+    var path=u.pathname.replace(/\/Lists\/.*$/,'');
+    /* Remove trailing slash */
+    if(path.endsWith('/'))path=path.slice(0,-1);
     return {host:host, path:path||'/'};
   }catch(e){return null;}
 }
@@ -616,158 +605,30 @@ async function ensureSiteId(){
   }catch(e){console.error('[list] ensureSiteId error:', e);return false;}
 }
 
-/* Find or create the schedule list (also creates phases list on first run) */
+/* Find the existing SharePoint list */
 async function ensureLists(){
-  if(SCHED_LIST_ID&&PHASE_LIST_ID)return true;
+  if(SCHED_LIST_ID)return true;
   if(!SITE_ID&&!(await ensureSiteId()))return false;
   var token=await getGraphToken();
   if(!token)return false;
   try{
-    /* Try to find existing lists */
-    if(!SCHED_LIST_ID||!PHASE_LIST_ID){
-      var res=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists?$select=id,displayName', {headers:{'Authorization':'Bearer '+token}});
-      if(!res.ok)throw new Error('List lookup failed: '+res.status);
-      var data=await res.json();
-      if(data.value){
-        for(var i=0;i<data.value.length;i++){
-          if(data.value[i].displayName==='Maseel Schedule')SCHED_LIST_ID=data.value[i].id;
-          if(data.value[i].displayName==='Maseel Phases')PHASE_LIST_ID=data.value[i].id;
-        }
+    var res=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists?$select=id,displayName', {headers:{'Authorization':'Bearer '+token}});
+    if(!res.ok)throw new Error('List lookup failed: '+res.status);
+    var data=await res.json();
+    if(data.value){
+      for(var i=0;i<data.value.length;i++){
+        if(data.value[i].displayName===LIST_NAME){SCHED_LIST_ID=data.value[i].id;break;}
       }
     }
-    if(SCHED_LIST_ID&&PHASE_LIST_ID){
+    if(SCHED_LIST_ID){
       try{localStorage.setItem('maseel_sched_list',SCHED_LIST_ID);}catch(e){}
-      try{localStorage.setItem('maseel_phase_list',PHASE_LIST_ID);}catch(e){}
       return true;
     }
-    /* Create missing lists and migrate from Excel */
-    return await createAndMigrateLists(token);
+    throw new Error('List "'+LIST_NAME+'" not found in site');
   }catch(e){console.error('[list] ensureLists error:', e);return false;}
 }
 
-/* Create lists and import data from the Excel file */
-async function createAndMigrateLists(token){
-  try{
-    /* Create schedule list only if missing */
-    if(!SCHED_LIST_ID){
-      var schRes=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists', {
-        method:'POST',
-        headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
-        body:JSON.stringify({
-          displayName:'Maseel Schedule',
-          description:'P6 project schedule imported from Excel',
-          columns:[
-            {name:'ActivityID',text:{maxLength:255}},
-            {name:'Phase',text:{maxLength:50}},
-            {name:'Duration',number:{}},
-            {name:'BaselineStart',dateTime:{format:'dateTime'}},
-            {name:'BaselineFinish',dateTime:{format:'dateTime'}},
-            {name:'Start',dateTime:{format:'dateTime'}},
-            {name:'Finish',dateTime:{format:'dateTime'}},
-            {name:'Float',number:{}},
-            {name:'Responsible',text:{maxLength:500}},
-            {name:'TotalQty',number:{}},
-            {name:'Unit',text:{maxLength:50}},
-            {name:'Status',text:{maxLength:50}},
-            {name:'Progress',number:{}},
-            {name:'Notes',text:{maxLength:2000,allowMultipleLines:true}},
-            {name:'ReadyQty',number:{}},
-            {name:'InspectedQty',number:{}},
-            {name:'RemainingQty',number:{}},
-            {name:'Timestamp',dateTime:{format:'dateTime'}}
-          ]
-        })
-      });
-      if(!schRes.ok)throw new Error('Create schedule list failed: '+schRes.status);
-      var sch=await schRes.json();
-      SCHED_LIST_ID=sch.id;
-    }
-    /* Create phases list only if missing */
-    if(!PHASE_LIST_ID){
-      var phRes=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists', {
-        method:'POST',
-        headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
-        body:JSON.stringify({
-          displayName:'Maseel Phases',
-          description:'Schedule phases / work breakdown',
-          columns:[
-            {name:'PhaseID',text:{maxLength:50}},
-            {name:'PhaseName',text:{maxLength:200}},
-            {name:'Order',number:{}},
-            {name:'Color',text:{maxLength:20}},
-            {name:'Start',dateTime:{format:'dateTime'}},
-            {name:'Finish',dateTime:{format:'dateTime'}},
-            {name:'Progress',number:{}},
-            {name:'Status',text:{maxLength:50}}
-          ]
-        })
-      });
-      if(!phRes.ok)throw new Error('Create phases list failed: '+phRes.status);
-      var ph=await phRes.json();
-      PHASE_LIST_ID=ph.id;
-    }
-    try{localStorage.setItem('maseel_sched_list',SCHED_LIST_ID);}catch(e){}
-    try{localStorage.setItem('maseel_phase_list',PHASE_LIST_ID);}catch(e){}
-    /* Import data from Excel (skip if schedule already has items) */
-    var cntRes=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/items?$top=1', {headers:{'Authorization':'Bearer '+token}});
-    if(cntRes.ok){
-      var cntData=await cntRes.json();
-      if(cntData.value&&cntData.value.length>0){showToast('✓ Lists ready');return true;}
-    }
-    var buf=await fetchExcelBytes(token);
-    if(!buf){showToast('Could not read source Excel for migration');return false;}
-    var parsed=parseP6Buffer(buf);
-    if(!parsed.activities.length)throw new Error('No activities in Excel');
-    /* Import phases */
-    for(var pi=0;pi<parsed.phases.length;pi++){
-      var p=parsed.phases[pi];
-      await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists/'+PHASE_LIST_ID+'/items', {
-        method:'POST',
-        headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
-        body:JSON.stringify({fields:{
-          PhaseID:p.id, PhaseName:p.name, Order:p.order, Color:p.color,
-          Start:p.s, Finish:p.f, Progress:p.progress, Status:p.status
-        }})
-      });
-    }
-    /* Import activities (batched for speed) */
-    for(var ai=0;ai<parsed.activities.length;ai++){
-      var a=parsed.activities[ai];
-      await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/items', {
-        method:'POST',
-        headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
-        body:JSON.stringify({fields:{
-          ActivityID:a.id, Title:a.title, Phase:a.ph,
-          Duration:a.dur, BaselineStart:a.bls||null, BaselineFinish:a.blf||null,
-          Start:a.s, Finish:a.f, Float:a.flt,
-          Responsible:a.responsibleList?a.responsibleList.join('; '):'',
-          TotalQty:a.totalQty||null, Unit:a.unit||'',
-          Status:a.st, Progress:a.pc, Notes:a.disc||'',
-          Timestamp:new Date().toISOString()
-        }})
-      });
-    }
-    try{localStorage.setItem('maseel_sched_list',SCHED_LIST_ID);}catch(e){}
-    try{localStorage.setItem('maseel_phase_list',PHASE_LIST_ID);}catch(e){}
-    showToast('✓ Created lists and imported '+parsed.activities.length+' activities');
-    return true;
-  }catch(e){console.error('[list] createAndMigrate error:', e);showToast('Migration failed: '+e.message);return false;}
-}
 
-/* Fetch Excel file via Graph (used only for first migration or re-import) */
-async function fetchExcelBytes(token){
-  try{
-    var encoded=shareUrlToEncoded(SP_SHARE_URL);
-    var res=await fetch(GRAPH_SHARE_BASE+encoded+'/driveItem?$select=id,parentReference', {headers:{'Authorization':'Bearer '+token}});
-    if(!res.ok)return null;
-    var item=await res.json();
-    var driveId=item.parentReference.driveId;
-    var itemId=item.id;
-    var dl=await fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+'/items/'+itemId+'/content?cb='+Date.now(), {headers:{'Authorization':'Bearer '+token}});
-    if(!dl.ok)return null;
-    return await dl.arrayBuffer();
-  }catch(e){return null;}
-}
 
 /* Fetch all activities from the SharePoint list */
 async function fetchListActivities(token){
@@ -776,20 +637,6 @@ async function fetchListActivities(token){
   while(url){
     var res=await fetch(url, {headers:{'Authorization':'Bearer '+token}});
     if(!res.ok)throw new Error('List fetch failed: '+res.status);
-    var data=await res.json();
-    if(data.value)items=items.concat(data.value);
-    url=data['@odata.nextLink']||null;
-  }
-  return items;
-}
-
-/* Fetch all phases from the SharePoint list */
-async function fetchListPhases(token){
-  var items=[];
-  var url=GRAPH_SITES_BASE+SITE_ID+'/lists/'+PHASE_LIST_ID+'/items?expand=fields&$top=100';
-  while(url){
-    var res=await fetch(url, {headers:{'Authorization':'Bearer '+token}});
-    if(!res.ok)throw new Error('Phase list fetch failed: '+res.status);
     var data=await res.json();
     if(data.value)items=items.concat(data.value);
     url=data['@odata.nextLink']||null;
@@ -853,7 +700,6 @@ function loadAuth(){
     /* Restore cached site/list IDs */
     var s=localStorage.getItem('maseel_site');if(s)SITE_ID=s;
     var sl=localStorage.getItem('maseel_sched_list');if(sl)SCHED_LIST_ID=sl;
-    var pl=localStorage.getItem('maseel_phase_list');if(pl)PHASE_LIST_ID=pl;
   }catch(e){}
   /* Pre-configured defaults */
   if(!AUTH.clientId)AUTH.clientId='1b3e37d8-0ba9-44b2-9033-68e4d8068a87';
@@ -1138,21 +984,17 @@ async function fetchLive() {
     if(!token)throw new Error('No Graph token');
     var items = await fetchListActivities(token);
     if(!items.length)throw new Error('No activities found in list');
-    var phases = await fetchListPhases(token);
     setLoadMsg('Processing ' + items.length + ' items…', 80);
+    /* Debug: log first item's field names to diagnose column mapping */
+    if(items.length&&items[0].fields)console.log('[list] sample fields:', Object.keys(items[0].fields).slice(0,30).join(', '), JSON.stringify(items[0].fields).slice(0,500));
     /* Convert list items to activity format */
     AC = items.map(function(item){return listItemToActivity(item.fields, item.id);});
     /* Build itemId lookup for writes */
     ST._itemIdMap = {}; AC.forEach(function(a){if(a._listItemId)ST._itemIdMap[a.id]=a._listItemId;});
-    /* Convert or derive phases */
-    if(phases.length){
-      PH = phases.map(function(item){return listItemToPhase(item.fields, item.id);});
-    } else {
-      /* Derive phases from activity data */
-      var pmap={},order=0;
-      AC.forEach(function(a){if(a.ph&&!pmap[a.ph]){pmap[a.ph]={id:a.ph,name:a.ph,order:order++,color:'#6B7280',s:null,f:null,progress:0,status:'In Progress'};}});
-      PH = Object.keys(pmap).sort(function(a,b){return pmap[a].order-pmap[b].order;}).map(function(k){return pmap[k];});
-    }
+    /* Derive phases from activity data */
+    var pmap={},order=0;
+    AC.forEach(function(a){if(a.ph&&!pmap[a.ph]){pmap[a.ph]={id:a.ph,name:a.ph,order:order++,color:'#6B7280',s:null,f:null,progress:0,status:'In Progress'};}});
+    PH = Object.keys(pmap).sort(function(a,b){return pmap[a].order-pmap[b].order;}).map(function(k){return pmap[k];});
     DS.state='live';
     DS.acts=AC.length;
     DS.ts=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
@@ -1554,7 +1396,7 @@ function rProfile(){
       _sr(I.zap,'rgba(239,68,68,.12)','#EF4444','Total Float','−49 days behind BL completion','')+
       _sr(I.gl,'rgba(139,92,246,.12)','var(--pu)','Duration','Oct 2025 – Jun 2027 (20 months)','')+
       _sr(I.link,'rgba(59,130,246,.12)','var(--bl)','SharePoint',
-        '<a href="'+SP_SHARE_URL+'" target="_blank" style="color:var(--bl);text-decoration:none;font-size:11px">Open in browser ↗</a>','')+
+        '<a href="'+SP_LIST_URL+'" target="_blank" style="color:var(--bl);text-decoration:none;font-size:11px">Open in browser ↗</a>','')+
     '</div>'+
     '<div class="sgrp"><div class="sg-lbl">Integrations</div>'+
       _sr(I.cal,'rgba(59,130,246,.12)','var(--bl)','Calendar Sync',ST.calSync?'Active':'Off',
@@ -1803,10 +1645,13 @@ async function syncAll(){
 }
 
 async function testGraph(){
-  showToast('Testing Graph API…');
+  showToast('Testing Graph…');
   var ok=await ensureLists();
   if(!ok){showToast('List not found — check console');return;}
-  showToast('✓ SharePoint List OK');
+  var token=await getGraphToken();
+  if(!token){showToast('No token');return;}
+  var items=await fetchListActivities(token);
+  showToast('✓ List OK — '+items.length+' activities');
 }
 
 async function saveToExcel(id, st, pc, notes, quiet){
