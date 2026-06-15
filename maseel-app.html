@@ -487,9 +487,9 @@ var AC_FALLBACK = [{"id":"MS.CO.GEN.MO.110","ph":"MOB","disc":"","title":"Time-R
 /* ══════════════════════════════════════════
    LIVE DATA HOLDERS
 ══════════════════════════════════════════ */
-var PH = PH_FALLBACK.slice();
-var AC = AC_FALLBACK.slice();
+var PH = [];
 
+var AC = [];
 /* ══════════════════════════════════════════
    STATE
 ══════════════════════════════════════════ */
@@ -1161,6 +1161,7 @@ async function fetchLive() {
   } catch(err) {
     DS.state='error';
     DS.error=err.message||'Fetch failed';
+    AC=[];PH=[];ST._itemIdMap=null;
     throw err;
   }
 }
@@ -1174,7 +1175,6 @@ async function refresh() {
     showToast('✓ '+DS.acts+' activities updated');
   }catch(err){
     showToast('✗ '+DS.error);
-    rToday(); rTimeline(); rProfile();
   }
 }
 
