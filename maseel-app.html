@@ -1096,9 +1096,16 @@ async function fetchLive() {
       var lres=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists?$select=id,displayName', {headers:{'Authorization':'Bearer '+token}});
       if(!lres.ok)throw new Error('List lookup failed');
       var ldata=await lres.json();
-      if(ldata.value){for(var i=0;i<ldata.value.length;i++){if(ldata.value[i].displayName===ctx.listName){SCHED_LIST_ID=ldata.value[i].id;break;}}}
+      if(ldata.value){
+        for(var i=0;i<ldata.value.length;i++){
+          if(ldata.value[i].displayName===ctx.listName){SCHED_LIST_ID=ldata.value[i].id;break;}
+        }
+      }
     }
-    if(!SCHED_LIST_ID)throw new Error('List "'+ctx.listName+'" not found on site');
+    if(!SCHED_LIST_ID){
+      var names=(ldata&&ldata.value?ldata.value.map(function(l){return l.displayName;}).join(', '):'none found');
+      throw new Error('List "'+ctx.listName+'" not found. Available lists: '+names);
+    }
     setLoadMsg('Downloading activities…', 70);
     var items=[],url=GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/items?expand=fields&$top=5000';
     while(url){
@@ -1794,8 +1801,10 @@ async function testGraph(){
       var ldata=await lres.json();
       if(ldata.value){for(var i=0;i<ldata.value.length;i++){if(ldata.value[i].displayName===ctx.listName){SCHED_LIST_ID=ldata.value[i].id;break;}}}
     }
-    if(!SCHED_LIST_ID)throw new Error('List "'+ctx.listName+'" not found');
-    showToast('✓ List OK — connected to "'+ctx.listName+'"');
+    if(!SCHED_LIST_ID){
+      var names=(ldata&&ldata.value?ldata.value.map(function(l){return l.displayName;}).join(', '):'none found');
+      throw new Error('List "'+ctx.listName+'" not found. Available: '+names);
+    }
   }catch(e){showToast('✗ '+e.message);}
 }
 /* Parse SharePoint list URL to extract site URL and list name */
