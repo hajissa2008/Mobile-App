@@ -760,21 +760,21 @@ async function updateListItem(token, itemId, fields){
 /* Convert list item fields to our activity format */
 function listItemToActivity(fields, itemId){
   var a={
-    id:fields.Activity_x0020_ID||'',
-    title:fields.Title||fields.Activity_x0020_Name||'',
+    id:fields.field_2||'',
+    title:fields.Title||'',
     ph:'',
-    dur:fields.Original_x0020_Duration,
+    dur:fields.field_5,
     bls:null,
     blf:null,
-    s:fields.Start?fields.Start.split('T')[0]:null,
-    f:fields.Finish?fields.Finish.split('T')[0]:null,
-    flt:fields.Total_x0020_Float,
-    responsibleList:(fields.responsible||'').split(/[,;]+/).map(function(x){return x.trim().toLowerCase();}).filter(function(x){return x;}),
-    totalQty:fields.QTY,
-    unit:fields.Unit||'',
-    st:fields.STATUS||'Not Started',
+    s:fields.field_6?fields.field_6.split('T')[0]:null,
+    f:fields.field_7?fields.field_7.split('T')[0]:null,
+    flt:fields.field_8,
+    responsibleList:(fields.field_9||'').split(/[,;]+/).map(function(x){return x.trim().toLowerCase();}).filter(function(x){return x;}),
+    totalQty:fields.field_3,
+    unit:fields.field_4||'',
+    st:fields.field_10||'Not Started',
     pc:0,
-    disc:fields.NOTE||'',
+    disc:fields.field_11||'',
     _listItemId:itemId
   };
   return a;
