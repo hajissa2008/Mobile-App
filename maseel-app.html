@@ -446,7 +446,7 @@ function killLoader(){
   var l=document.getElementById('loading');
   if(l&&l.parentNode)l.parentNode.removeChild(l);
   if(typeof DS!=='undefined'&&DS.state==='loading'){
-    DS.state='cached';DS.msg='Offline · fallback data';
+    DS.state='error';DS.msg='Timed out';
     try{setLoadMsg('',0);}catch(e){}
   }
 }
@@ -667,19 +667,26 @@ function initMsal(){
   if(AUTH.instance)return;
   var redirectUri=window.location.origin+window.location.pathname;
   AUTH.instance=new msal.PublicClientApplication({auth:{clientId:AUTH.clientId,authority:'https://login.microsoftonline.com/'+AUTH.tenantId,redirectUri:redirectUri}});
-  AUTH.instance.handleRedirectPromise().then(function(resp){
-    if(resp&&!resp.account)return;
-    if(resp&&resp.account){AUTH.user=resp.account;AUTH._profile=resp.account.name||resp.account.username||'';try{localStorage.setItem('msal_profile',AUTH._profile);}catch(e){}
-      /* Fetch fresh data from SharePoint now that we're authenticated */
-      fetchLive().then(function(){try{rToday();}catch(e){}try{rTimeline();}catch(e){}try{rProfile();}catch(e){}}).catch(function(){});}
-    try{hideLoginScreen();}catch(e){}
-    try{rProfile();}catch(e){}
-    /* Check if we were in the middle of something before redirect */
-    var pending=sessionStorage.getItem('maseel_pending');
-    if(pending){sessionStorage.removeItem('maseel_pending');
-      if(pending==='token'){showToast('✓ Graph permission granted');try{rProfile();}catch(e){}setTimeout(syncAll,500);}
-    }
-  }).catch(function(){});
+  AUTH._redirectResolved = new Promise(function(rr){
+    AUTH._doneRedirect = false;
+    AUTH.instance.handleRedirectPromise().then(function(resp){
+      if(!resp||!resp.account){rr();return;}
+      AUTH.user=resp.account;AUTH._profile=resp.account.name||resp.account.username||'';try{localStorage.setItem('msal_profile',AUTH._profile);}catch(e){}
+      AUTH._doneRedirect = true;
+      fetchLive().then(function(){
+        try{rToday();}catch(e){}try{rTimeline();}catch(e){}try{rProfile();}catch(e){}
+        hideLoginScreen();
+        var pending=sessionStorage.getItem('maseel_pending');
+        if(pending){sessionStorage.removeItem('maseel_pending');
+          if(pending==='token'){showToast('✓ Graph permission granted');try{rProfile();}catch(e){}setTimeout(syncAll,500);}
+        }
+        rr();
+      }).catch(function(err){
+        showToast('Failed to load schedule: '+err.message);
+        rr();
+      });
+    }).catch(function(){rr();});
+  });
   var accounts=AUTH.instance.getAllAccounts();
   if(accounts&&accounts.length>0){AUTH.user=accounts[0];}
 }
@@ -913,85 +920,53 @@ function setLoadMsg(msg, pct) {
 }
 
 async function fetchLive() {
-  var hadLive = DS.state === 'live';
   DS.state='loading'; DS.msg='Connecting to SharePoint…';
   setLoadMsg('Connecting to SharePoint…', 20);
-
   try {
-    var controller = typeof AbortController!=='undefined' ? new AbortController() : null;
-    var tid = controller ? setTimeout(function(){controller.abort();}, 12000) : null;
-
     setLoadMsg('Downloading schedule file…', 40);
-    var buf, source='';
-    var cb='?_='+Date.now();
-    /* Try Graph API first (requires MSAL + Files.ReadWrite.All) */
-    if(AUTH.user){
-      var gBuf = await fetchViaGraph();
-      if(gBuf){buf=gBuf;source='Graph API';}
-    }
-    if(!source){
-      try {
-        var controller2 = typeof AbortController!=='undefined' ? new AbortController() : null;
-        var tid2 = controller2 ? setTimeout(function(){controller2.abort();}, 15000) : null;
-        var res = await fetch(SP_DL_URL+cb, {signal: controller2 ? controller2.signal : undefined});
-        if(tid2)clearTimeout(tid2);
-        if(res.ok){buf=await res.arrayBuffer();source='SharePoint';}
-      } catch(e3){}
-    }
-    if (tid) clearTimeout(tid);
-    if (!source) throw new Error('Could not fetch schedule file');
-
+    var buf = await fetchViaGraph();
+    if(!buf)throw new Error('Could not fetch schedule file — check Graph API access');
     setLoadMsg('Parsing P6 data…', 70);
-
     var parsed = parseP6Buffer(buf);
-
-    if (!parsed.activities.length) throw new Error('No activities found in file');
-
+    if(!parsed.activities.length)throw new Error('No activities found in file');
     PH = parsed.phases;
     AC = parsed.activities;
-    // overrides from localStorage persist across refreshes
-
     DS.state='live';
     DS.acts=AC.length;
     DS.ts=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-    DS.msg='Live · '+source+' · '+DS.ts;
+    DS.msg='Live · Graph API · '+DS.ts;
     setLoadMsg('Schedule loaded ✓', 100);
-
   } catch(err) {
-    /* On error, keep existing live data if we had it; otherwise fall back to cached */
-    if(!hadLive){
-      PH = PH_FALLBACK.slice();
-      AC = AC_FALLBACK.slice();
-      DS.acts=AC.length;
-      DS.ts='3 Jun 2026';
-    } else {
-      DS.acts = AC.length;
-    }
-    DS.state='cached';
+    DS.state='error';
     DS.error=err.message||'Fetch failed';
-    DS.msg='Using '+(hadLive?'previous live':'cached')+' schedule · '+DATA_DATE+(AUTH.user?' · live unavailable':'');
-    setLoadMsg('Using '+(hadLive?'previous data':'cached data'), 100);
+    throw err;
   }
 }
 
 async function refresh() {
   DS.state='loading'; DS.msg='Refreshing…';
   rProfile();
-  await fetchLive();
-  rToday(); rTimeline(); rProfile();
-  showToast(DS.state==='live'?'✓ '+DS.acts+' activities updated':DS.state==='cached'?'Cached data — live unavailable':'✗ Failed: '+DS.error.substring(0,50));
+  try{
+    await fetchLive();
+    rToday(); rTimeline(); rProfile();
+    showToast('✓ '+DS.acts+' activities updated');
+  }catch(err){
+    showToast('✗ '+DS.error);
+    rToday(); rTimeline(); rProfile();
+  }
 }
 
 var LAST_CHECK = 0;
 async function silentRefresh() {
-  if (ST.selId) return; // don't interrupt the sheet
-  var wasCached = DS.state === 'cached';
+  if (ST.selId) return;
   var oldLen = AC.length;
-  await fetchLive();
-  rToday(); rTimeline(); rProfile();
-  if (DS.state !== 'loading' && (wasCached || AC.length !== oldLen)) {
-    showToast(DS.state==='live'?'✓ Schedule updated':'Cached');
-  }
+  try{
+    await fetchLive();
+    rToday(); rTimeline(); rProfile();
+    if (AC.length !== oldLen) {
+      showToast('✓ Schedule updated');
+    }
+  }catch(e){/* keep current data on silent fail */}
   LAST_CHECK = Date.now();
 }
 
@@ -1078,11 +1053,11 @@ function permBanner(){
 /* connection banner */
 function connBanner() {
   var state=DS.state;
-  var cls=state==='live'?'live':state==='cached'?'cached':state==='error'?'error':'loading';
+  var cls=state==='live'?'live':state==='error'?'error':'loading';
   var ico=state==='live'?I.wifi:state==='loading'?'<span class="spin">'+I.ref+'</span>':I.wifi;
-  var col=state==='live'?'var(--gr)':state==='cached'?'var(--a)':state==='error'?'var(--rd)':'var(--bl)';
-  var txt=state==='live'?'Live · SharePoint · '+DS.ts:state==='cached'?'Cached · '+DATA_DATE:state==='loading'?'Connecting…':'Error';
-  var sub=state==='live'?DS.acts+' activities':state==='error'?DS.error.substring(0,55):'Fallback: '+AC.length+' activities';
+  var col=state==='live'?'var(--gr)':state==='error'?'var(--rd)':'var(--bl)';
+  var txt=state==='live'?'Live · SharePoint · '+DS.ts:state==='loading'?'Connecting…':'Error';
+  var sub=state==='live'?DS.acts+' activities':state==='error'?DS.error.substring(0,55):'';
   var btn=state==='live'?'<button class="cb-btn live-btn" onclick="refresh()">'+I.ref+' Refresh</button>':
           state==='loading'?'':
           '<button class="cb-btn retry-btn" onclick="refresh()">Retry</button>';
@@ -1302,13 +1277,13 @@ function rProfile(){
   /* data source card */
   var dsLive=DS.state==='live';
   var dsLoad=DS.state==='loading';
-  var dsCls=dsLive?'live-card':dsLoad?'':DS.state==='error'?'err-card':'cached-card';
-  var dsDotCls=dsLive?'live':dsLoad?'cached':'cached';
-  var dsCol=dsLive?'rgba(16,185,129,.12)':dsLoad?'rgba(59,130,246,.12)':'rgba(245,158,11,.12)';
-  var dsIcoCol=dsLive?'#10B981':dsLoad?'#3B82F6':'#F59E0B';
-  var dsStatusTxt=dsLive?'Connected · '+DS.ts:dsLoad?'Connecting…':'Cached · '+DATA_DATE;
-  var dsSubTxt=dsLive?DS.acts+' activities loaded live':DS.error?DS.error.substring(0,60):'Offline — using embedded export';
-  var refBtnCol=dsLive?'color:#10B981;background:rgba(16,185,129,.12)':'color:#F59E0B;background:rgba(245,158,11,.1)';
+  var dsCls=dsLive?'live-card':DS.state==='error'?'err-card':'';
+  var dsDotCls=dsLive?'live':'';
+  var dsCol=dsLive?'rgba(16,185,129,.12)':dsLoad?'rgba(59,130,246,.12)':'rgba(239,68,68,.12)';
+  var dsIcoCol=dsLive?'#10B981':dsLoad?'#3B82F6':'#EF4444';
+  var dsStatusTxt=dsLive?'Connected · '+DS.ts:dsLoad?'Connecting…':'Error';
+  var dsSubTxt=dsLive?DS.acts+' activities loaded live':DS.error?DS.error.substring(0,60):'Failed to load';
+  var refBtnCol=dsLive?'color:#10B981;background:rgba(16,185,129,.12)':'color:#EF4444;background:rgba(239,68,68,.12)';
 
   var pName = AUTH._profile || (AUTH.user?AUTH.user.name:'') || AUTH.user?.username || 'User';
   var pInitials = (pName.match(/\b\w/g)||[]).slice(0,2).join('').toUpperCase() || '?';
@@ -1964,19 +1939,30 @@ document.addEventListener('click',function(e){
 if('serviceWorker'in navigator){navigator.serviceWorker.register('sw.js').catch(function(){})}
 
 (async function(){
-  try{rToday();}catch(e){}
-  try{rTimeline();}catch(e){}
-  try{rProfile();}catch(e){}
+  /* Wait for MSAL to init */
+  await new Promise(function(res){var i=setInterval(function(){if(AUTH.instance||typeof msal!=='undefined'){clearInterval(i);res();}},50);});
+  /* Wait for handleRedirectPromise to settle (avoids login flash during redirect) */
+  if(AUTH._redirectResolved)await AUTH._redirectResolved;
 
-  /* Attempt live SharePoint fetch */
-  await fetchLive();
+  /* If the redirect handler already fetched data and rendered, we're done */
+  if(AUTH._doneRedirect){_maseel_ready=2;setTimeout(killLoader,200);return;}
 
-  /* Auto-sync any pending overrides to Excel */
-  if(ST.syncQ>0&&AUTH.user){
-    setTimeout(function(){if(ST.syncQ>0&&!ST.syncing)syncAll();}, 1000);
+  /* If no user → show login screen, block app */
+  if(!AUTH.user){
+    showLoginScreen(); killLoader();
+    return;
+  }
+  hideLoginScreen();
+
+  /* Attempt live SharePoint fetch via Graph API */
+  setLoadMsg('Connecting to SharePoint…', 10);
+  try{
+    await fetchLive();
+  }catch(e){
+    showToast('Could not load schedule: '+DS.error);
   }
 
-  /* Re-render with live data (or confirm cached) */
+  /* Initial render */
   try{rToday();}catch(e){}
   try{rTimeline();}catch(e){}
   try{rProfile();}catch(e){}
@@ -1984,23 +1970,6 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register('sw.js').catch(
   /* Hide loader */
   setTimeout(killLoader, 400);
   _maseel_ready = 2;
-
-  /* Show login screen if not authenticated */
-  if(!AUTH.user){
-    var waitMsal=setInterval(function(){
-      if(AUTH.instance||typeof msal!=='undefined'){
-        clearInterval(waitMsal);
-        var accs=AUTH.instance?AUTH.instance.getAllAccounts():[];
-        if(accs&&accs.length>0){
-          AUTH.user=accs[0];hideLoginScreen();
-          if(ST.syncQ>0)setTimeout(function(){if(ST.syncQ>0&&!ST.syncing)syncAll();}, 1500);
-        }else{showLoginScreen();}
-      }
-    },200);
-    setTimeout(function(){clearInterval(waitMsal);if(!AUTH.user)showLoginScreen();},5000);
-  }else{
-    hideLoginScreen();
-  }
 
   /* Auto-poll every 60 seconds */
   setInterval(silentRefresh, 60000);
