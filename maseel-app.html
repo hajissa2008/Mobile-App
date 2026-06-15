@@ -544,9 +544,11 @@ function removePhoto(id){var p=loadPhotos();delete p[id];savePhotos(p);}
    AUTH — Office 365 SSO (MSAL, optional)
 ══════════════════════════════════════════ */
 var AUTH = {enabled:false, clientId:'', tenantId:'', user:null, instance:null, _profile:'', _cfg:null, graphToken:null, graphTokenExp:0};
-var GRAPH_SCOPE = 'https://graph.microsoft.com/Files.ReadWrite.All';
+var GRAPH_SCOPE = 'https://graph.microsoft.com/Sites.ReadWrite.All';
 var MAIL_SCOPE = 'https://graph.microsoft.com/Mail.Send';
 var GRAPH_SHARE_BASE = 'https://graph.microsoft.com/v1.0/shares/';
+var GRAPH_SITES_BASE = 'https://graph.microsoft.com/v1.0/sites/';
+var LIST_NAME = 'Maseel Schedule';
 var NOTIFY_EMAIL = 'm.hajissa@alenshaiah.com';
 var INSPECT_EMAIL = 'h.shehata@alenshaiah.com';
 var ADMIN_EMAILS = ['m.hajissa@alenshaiah.com'];
@@ -577,68 +579,269 @@ async function getGraphToken(){
   }
 }
 
-async function ensureDriveIds(){
-  if(ST.graphDriveId&&ST.graphItemId)return true;
-  var token = await getGraphToken();
-  if(!token)return false;
-  try{
-    var encoded = shareUrlToEncoded(SP_SHARE_URL);
-    var res = await fetch(GRAPH_SHARE_BASE + encoded + '/driveItem?$select=id,parentReference', {headers:{'Authorization':'Bearer '+token}});
-    if(!res.ok){console.log('[graph] driveItem lookup failed:', res.status);return false;}
-    var item = await res.json();
-    if(!item.parentReference||!item.parentReference.driveId||!item.id){console.log('[graph] driveItem missing id/parentReference', item);return false;}
-    ST.graphDriveId = item.parentReference.driveId;
-    ST.graphItemId = item.id;
-    try{localStorage.setItem('maseel_gdrive',JSON.stringify({d:ST.graphDriveId,i:ST.graphItemId}));}catch(e){}
-    return true;
-  }catch(e){console.log('[graph] ensureDriveIds error:', e);return false;}
-}
+/* ══════════════════════════════════════════
+   SHAREPOINT LIST — replaces Excel file read/write
+══════════════════════════════════════════ */
+var SITE_ID = null;
+var SCHED_LIST_ID = null;
+var PHASE_LIST_ID = null;
 
-function graphContentUrl(){
-  return 'https://graph.microsoft.com/v1.0/drives/'+ST.graphDriveId+'/items/'+ST.graphItemId+'/content';
-}
-
-async function fetchViaGraph(){
-  var ok = await ensureDriveIds();
-  if(!ok)return null;
-  var token = await getGraphToken();
-  if(!token)return null;
+/* Parse the SharePoint site hostname and path from the share URL */
+function siteInfoFromShareUrl(url){
   try{
-    var res = await fetch(graphContentUrl()+'?cb='+Date.now(), {headers:{'Authorization':'Bearer '+token}});
-    if(!res.ok)return null;
-    return await res.arrayBuffer();
+    var u=new URL(url);
+    /* For OneDrive: https://{tenant}-my.sharepoint.com/:x:/g/{path} */
+    var host=u.hostname;
+    /* Remove /:x:/... prefix to get the site path */
+    var path='/'+u.pathname.split('/').slice(2).filter(function(s){return s&&!s.startsWith(':')&&s!=='g'&&s!=='r'&&s!=='f';}).join('/').split('/').slice(0,-1).join('/');
+    /* For personal sites, path is /personal/{email} */
+    return {host:host, path:path||'/'};
   }catch(e){return null;}
 }
 
-async function uploadViaGraph(buf){
-  var ok = await ensureDriveIds();
-  if(!ok)return false;
-  var token = await getGraphToken();
+/* Resolve site ID from the SharePoint URL (one-time) */
+async function ensureSiteId(){
+  if(SITE_ID)return true;
+  var token=await getGraphToken();
   if(!token)return false;
   try{
-    var res = await fetch(graphContentUrl(), {
-      method:'PUT',
-      headers:{'Authorization':'Bearer '+token, 'Content-Type':'application/octet-stream'},
-      body:buf
-    });
-    return res.ok;
-  }catch(e){return false;}
+    var info=siteInfoFromShareUrl(SP_SHARE_URL);
+    if(!info)throw new Error('Could not parse share URL');
+    var res=await fetch(GRAPH_SITES_BASE+info.host+':'+info.path, {headers:{'Authorization':'Bearer '+token}});
+    if(!res.ok)throw new Error('Site lookup failed: '+res.status);
+    var site=await res.json();
+    SITE_ID=site.id;
+    try{localStorage.setItem('maseel_site',SITE_ID);}catch(e){}
+    return true;
+  }catch(e){console.error('[list] ensureSiteId error:', e);return false;}
 }
-async function fetchViaGraphRetry(retries){
-  for(var i=0;i<retries;i++){
-    var buf=await fetchViaGraph();
-    if(buf)return buf;
-    if(i<retries-1)await new Promise(function(r){setTimeout(r,2000*(i+1));});
-  }
-  return null;
+
+/* Find or create the schedule list (also creates phases list on first run) */
+async function ensureLists(){
+  if(SCHED_LIST_ID&&PHASE_LIST_ID)return true;
+  if(!SITE_ID&&!(await ensureSiteId()))return false;
+  var token=await getGraphToken();
+  if(!token)return false;
+  try{
+    /* Try to find existing lists */
+    if(!SCHED_LIST_ID||!PHASE_LIST_ID){
+      var res=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists?$select=id,displayName', {headers:{'Authorization':'Bearer '+token}});
+      if(!res.ok)throw new Error('List lookup failed: '+res.status);
+      var data=await res.json();
+      if(data.value){
+        for(var i=0;i<data.value.length;i++){
+          if(data.value[i].displayName==='Maseel Schedule')SCHED_LIST_ID=data.value[i].id;
+          if(data.value[i].displayName==='Maseel Phases')PHASE_LIST_ID=data.value[i].id;
+        }
+      }
+    }
+    if(SCHED_LIST_ID&&PHASE_LIST_ID){
+      try{localStorage.setItem('maseel_sched_list',SCHED_LIST_ID);}catch(e){}
+      try{localStorage.setItem('maseel_phase_list',PHASE_LIST_ID);}catch(e){}
+      return true;
+    }
+    /* Create missing lists and migrate from Excel */
+    return await createAndMigrateLists(token);
+  }catch(e){console.error('[list] ensureLists error:', e);return false;}
 }
-async function uploadViaGraphRetry(buf, retries){
-  for(var i=0;i<retries;i++){
-    var ok=await uploadViaGraph(buf);
-    if(ok)return true;
-    if(i<retries-1)await new Promise(function(r){setTimeout(r,2000*(i+1));});
+
+/* Create lists and import data from the Excel file */
+async function createAndMigrateLists(token){
+  try{
+    /* Create schedule list only if missing */
+    if(!SCHED_LIST_ID){
+      var schRes=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists', {
+        method:'POST',
+        headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({
+          displayName:'Maseel Schedule',
+          description:'P6 project schedule imported from Excel',
+          columns:[
+            {name:'ActivityID',text:{maxLength:255}},
+            {name:'Phase',text:{maxLength:50}},
+            {name:'Duration',number:{}},
+            {name:'BaselineStart',dateTime:{format:'dateTime'}},
+            {name:'BaselineFinish',dateTime:{format:'dateTime'}},
+            {name:'Start',dateTime:{format:'dateTime'}},
+            {name:'Finish',dateTime:{format:'dateTime'}},
+            {name:'Float',number:{}},
+            {name:'Responsible',text:{maxLength:500}},
+            {name:'TotalQty',number:{}},
+            {name:'Unit',text:{maxLength:50}},
+            {name:'Status',text:{maxLength:50}},
+            {name:'Progress',number:{}},
+            {name:'Notes',text:{maxLength:2000,allowMultipleLines:true}},
+            {name:'ReadyQty',number:{}},
+            {name:'InspectedQty',number:{}},
+            {name:'RemainingQty',number:{}},
+            {name:'Timestamp',dateTime:{format:'dateTime'}}
+          ]
+        })
+      });
+      if(!schRes.ok)throw new Error('Create schedule list failed: '+schRes.status);
+      var sch=await schRes.json();
+      SCHED_LIST_ID=sch.id;
+    }
+    /* Create phases list only if missing */
+    if(!PHASE_LIST_ID){
+      var phRes=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists', {
+        method:'POST',
+        headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({
+          displayName:'Maseel Phases',
+          description:'Schedule phases / work breakdown',
+          columns:[
+            {name:'PhaseID',text:{maxLength:50}},
+            {name:'PhaseName',text:{maxLength:200}},
+            {name:'Order',number:{}},
+            {name:'Color',text:{maxLength:20}},
+            {name:'Start',dateTime:{format:'dateTime'}},
+            {name:'Finish',dateTime:{format:'dateTime'}},
+            {name:'Progress',number:{}},
+            {name:'Status',text:{maxLength:50}}
+          ]
+        })
+      });
+      if(!phRes.ok)throw new Error('Create phases list failed: '+phRes.status);
+      var ph=await phRes.json();
+      PHASE_LIST_ID=ph.id;
+    }
+    try{localStorage.setItem('maseel_sched_list',SCHED_LIST_ID);}catch(e){}
+    try{localStorage.setItem('maseel_phase_list',PHASE_LIST_ID);}catch(e){}
+    /* Import data from Excel (skip if schedule already has items) */
+    var cntRes=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/items?$top=1', {headers:{'Authorization':'Bearer '+token}});
+    if(cntRes.ok){
+      var cntData=await cntRes.json();
+      if(cntData.value&&cntData.value.length>0){showToast('✓ Lists ready');return true;}
+    }
+    var buf=await fetchExcelBytes(token);
+    if(!buf){showToast('Could not read source Excel for migration');return false;}
+    var parsed=parseP6Buffer(buf);
+    if(!parsed.activities.length)throw new Error('No activities in Excel');
+    /* Import phases */
+    for(var pi=0;pi<parsed.phases.length;pi++){
+      var p=parsed.phases[pi];
+      await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists/'+PHASE_LIST_ID+'/items', {
+        method:'POST',
+        headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({fields:{
+          PhaseID:p.id, PhaseName:p.name, Order:p.order, Color:p.color,
+          Start:p.s, Finish:p.f, Progress:p.progress, Status:p.status
+        }})
+      });
+    }
+    /* Import activities (batched for speed) */
+    for(var ai=0;ai<parsed.activities.length;ai++){
+      var a=parsed.activities[ai];
+      await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/items', {
+        method:'POST',
+        headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({fields:{
+          ActivityID:a.id, Title:a.title, Phase:a.ph,
+          Duration:a.dur, BaselineStart:a.bls||null, BaselineFinish:a.blf||null,
+          Start:a.s, Finish:a.f, Float:a.flt,
+          Responsible:a.responsibleList?a.responsibleList.join('; '):'',
+          TotalQty:a.totalQty||null, Unit:a.unit||'',
+          Status:a.st, Progress:a.pc, Notes:a.disc||'',
+          Timestamp:new Date().toISOString()
+        }})
+      });
+    }
+    try{localStorage.setItem('maseel_sched_list',SCHED_LIST_ID);}catch(e){}
+    try{localStorage.setItem('maseel_phase_list',PHASE_LIST_ID);}catch(e){}
+    showToast('✓ Created lists and imported '+parsed.activities.length+' activities');
+    return true;
+  }catch(e){console.error('[list] createAndMigrate error:', e);showToast('Migration failed: '+e.message);return false;}
+}
+
+/* Fetch Excel file via Graph (used only for first migration or re-import) */
+async function fetchExcelBytes(token){
+  try{
+    var encoded=shareUrlToEncoded(SP_SHARE_URL);
+    var res=await fetch(GRAPH_SHARE_BASE+encoded+'/driveItem?$select=id,parentReference', {headers:{'Authorization':'Bearer '+token}});
+    if(!res.ok)return null;
+    var item=await res.json();
+    var driveId=item.parentReference.driveId;
+    var itemId=item.id;
+    var dl=await fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+'/items/'+itemId+'/content?cb='+Date.now(), {headers:{'Authorization':'Bearer '+token}});
+    if(!dl.ok)return null;
+    return await dl.arrayBuffer();
+  }catch(e){return null;}
+}
+
+/* Fetch all activities from the SharePoint list */
+async function fetchListActivities(token){
+  var items=[];
+  var url=GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/items?expand=fields&$top=5000';
+  while(url){
+    var res=await fetch(url, {headers:{'Authorization':'Bearer '+token}});
+    if(!res.ok)throw new Error('List fetch failed: '+res.status);
+    var data=await res.json();
+    if(data.value)items=items.concat(data.value);
+    url=data['@odata.nextLink']||null;
   }
-  return false;
+  return items;
+}
+
+/* Fetch all phases from the SharePoint list */
+async function fetchListPhases(token){
+  var items=[];
+  var url=GRAPH_SITES_BASE+SITE_ID+'/lists/'+PHASE_LIST_ID+'/items?expand=fields&$top=100';
+  while(url){
+    var res=await fetch(url, {headers:{'Authorization':'Bearer '+token}});
+    if(!res.ok)throw new Error('Phase list fetch failed: '+res.status);
+    var data=await res.json();
+    if(data.value)items=items.concat(data.value);
+    url=data['@odata.nextLink']||null;
+  }
+  return items;
+}
+
+/* Update a single list item's fields */
+async function updateListItem(token, itemId, fields){
+  var res=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/items/'+itemId+'/fields', {
+    method:'PATCH',
+    headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+    body:JSON.stringify(fields)
+  });
+  return res.ok;
+}
+
+/* Convert list item fields to our activity format */
+function listItemToActivity(fields, itemId){
+  return {
+    id:fields.ActivityID||'',
+    title:fields.Title||'',
+    ph:fields.Phase||'',
+    dur:fields.Duration,
+    bls:fields.BaselineStart?fields.BaselineStart.split('T')[0]:null,
+    blf:fields.BaselineFinish?fields.BaselineFinish.split('T')[0]:null,
+    s:fields.Start?fields.Start.split('T')[0]:null,
+    f:fields.Finish?fields.Finish.split('T')[0]:null,
+    flt:fields.Float,
+    responsibleList:(fields.Responsible||'').split(/[,;]+/).map(function(x){return x.trim().toLowerCase();}).filter(function(x){return x;}),
+    totalQty:fields.TotalQty,
+    unit:fields.Unit||'',
+    st:fields.Status||'Not Started',
+    pc:fields.Progress||0,
+    disc:fields.Notes||'',
+    _listItemId:itemId
+  };
+}
+
+/* Convert list item fields to our phase format */
+function listItemToPhase(fields, itemId){
+  return {
+    id:fields.PhaseID||'',
+    name:fields.PhaseName||'',
+    order:fields.Order||0,
+    color:fields.Color||'#6B7280',
+    s:fields.Start?fields.Start.split('T')[0]:null,
+    f:fields.Finish?fields.Finish.split('T')[0]:null,
+    progress:fields.Progress||0,
+    status:fields.Status||'In Progress',
+    _listItemId:itemId
+  };
 }
 
 function loadAuth(){
@@ -647,6 +850,10 @@ function loadAuth(){
     if(c){AUTH._cfg=JSON.parse(c);AUTH.enabled=true;AUTH.clientId=AUTH._cfg.clientId||'';AUTH.tenantId=AUTH._cfg.tenantId||'';}
     var p=localStorage.getItem('msal_profile');
     if(p)AUTH._profile=p;
+    /* Restore cached site/list IDs */
+    var s=localStorage.getItem('maseel_site');if(s)SITE_ID=s;
+    var sl=localStorage.getItem('maseel_sched_list');if(sl)SCHED_LIST_ID=sl;
+    var pl=localStorage.getItem('maseel_phase_list');if(pl)PHASE_LIST_ID=pl;
   }catch(e){}
   /* Pre-configured defaults */
   if(!AUTH.clientId)AUTH.clientId='1b3e37d8-0ba9-44b2-9033-68e4d8068a87';
@@ -923,18 +1130,33 @@ async function fetchLive() {
   DS.state='loading'; DS.msg='Connecting to SharePoint…';
   setLoadMsg('Connecting to SharePoint…', 20);
   try {
-    setLoadMsg('Downloading schedule file…', 40);
-    var buf = await fetchViaGraph();
-    if(!buf)throw new Error('Could not fetch schedule file — check Graph API access');
-    setLoadMsg('Parsing P6 data…', 70);
-    var parsed = parseP6Buffer(buf);
-    if(!parsed.activities.length)throw new Error('No activities found in file');
-    PH = parsed.phases;
-    AC = parsed.activities;
+    setLoadMsg('Ensuring lists…', 30);
+    var ok = await ensureLists();
+    if(!ok)throw new Error('Could not find or create SharePoint lists');
+    setLoadMsg('Downloading activities…', 50);
+    var token = await getGraphToken();
+    if(!token)throw new Error('No Graph token');
+    var items = await fetchListActivities(token);
+    if(!items.length)throw new Error('No activities found in list');
+    var phases = await fetchListPhases(token);
+    setLoadMsg('Processing ' + items.length + ' items…', 80);
+    /* Convert list items to activity format */
+    AC = items.map(function(item){return listItemToActivity(item.fields, item.id);});
+    /* Build itemId lookup for writes */
+    ST._itemIdMap = {}; AC.forEach(function(a){if(a._listItemId)ST._itemIdMap[a.id]=a._listItemId;});
+    /* Convert or derive phases */
+    if(phases.length){
+      PH = phases.map(function(item){return listItemToPhase(item.fields, item.id);});
+    } else {
+      /* Derive phases from activity data */
+      var pmap={},order=0;
+      AC.forEach(function(a){if(a.ph&&!pmap[a.ph]){pmap[a.ph]={id:a.ph,name:a.ph,order:order++,color:'#6B7280',s:null,f:null,progress:0,status:'In Progress'};}});
+      PH = Object.keys(pmap).sort(function(a,b){return pmap[a].order-pmap[b].order;}).map(function(k){return pmap[k];});
+    }
     DS.state='live';
     DS.acts=AC.length;
     DS.ts=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-    DS.msg='Live · Graph API · '+DS.ts;
+    DS.msg='Live · SharePoint List · '+DS.ts;
     setLoadMsg('Schedule loaded ✓', 100);
   } catch(err) {
     DS.state='error';
@@ -1538,73 +1760,43 @@ async function syncAll(){
   if(ST.syncing)return;
   ST.syncing=true;
   try{
-    showToast('Syncing all pending changes…');
-    console.log('[sync] syncAll starting, pending:', ST.syncQ);
+    if(!ST._itemIdMap)return;
+    showToast('Syncing pending changes…');
     var token = await getGraphToken();
     if(!token)return;
     var ids = Object.keys(ST.overrides);
     if(!ids.length)return;
-    var buf = await fetchViaGraphRetry(5);
-    if(!buf){showToast('File locked — close Excel and try again');return;}
-    var wb = XLSX.read(new Uint8Array(buf), {type:'array', raw:true, cellDates:false});
-    var sn = wb.SheetNames[0];
-    var ws = wb.Sheets[sn];
-    var rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:''});
-    if(rows.length<2)return;
-    var cPc=-1,cSt=-1,cNote=-1,cTs=-1,cRdy=-1,cInsQ=-1,cRemQ=-1,cId=0,cResp=8;
-    if(rows[0]){
-      for(var ci=0;ci<rows[0].length;ci++){
-        var h=rows[0][ci];if(h==null)continue;
-        var hh=String(h).trim().toUpperCase();
-        if(hh==='PROGRESS')cPc=ci;
-        else if(hh==='STATUS')cSt=ci;
-        else if(hh==='NOTE'||hh==='NOTES')cNote=ci;
-        else if(hh==='TIME STAMP'||hh==='TIMESTAMP'||hh==='TIME')cTs=ci;
-        else if(hh==='READY QTY'||hh==='READY'||hh==='QUANTITY READY')cRdy=ci;
-        else if(hh==='INSPECTED QTY'||hh==='INSPECTED')cInsQ=ci;
-        else if(hh==='REMAINING QTY'||hh==='REMAINING')cRemQ=ci;
-        else if(hh==='ACTIVITY ID'||hh==='TASK ID'||hh==='ID'||hh==='WBS')cId=ci;
-        else if(hh==='RESPONSIBLE'||hh==='RESPONSIBLE RESOURCE'||hh==='RESOURCE')cResp=ci;
-      }
-    }
-    if(cPc<0&&cSt<0&&cNote<0&&cTs<0){showToast('No update columns found in sheet');return;}
-    var now = new Date().toISOString();
-    var synced=0,notFound=0;
+    var synced=0,failed=0,now=new Date().toISOString();
     for(var si=0;si<ids.length;si++){
-      var o=ST.overrides[ids[si]];if(!o)continue;
-      var f=false;
-      for(var i=1;i<rows.length;i++){
-        if(rows[i][cId]!=null&&String(rows[i][cId]).trim()===ids[si]){
-          if(cPc>=0)rows[i][cPc]=o.pc!=null?o.pc:0;
-          if(cSt>=0)rows[i][cSt]=o.st||'Not Started';
-          if(cNote>=0)rows[i][cNote]=o.notes||rows[i][cNote]||'';
-          if(cTs>=0)rows[i][cTs]=now;
-          if(cResp>=0&&o.responsibleList)rows[i][cResp]=o.responsibleList.join('; ');
-          if(o.st==='For Inspection'){
-            var cur=rows[i][cResp]?String(rows[i][cResp]).trim():'';
-            if(cur.toLowerCase().indexOf(INSPECT_EMAIL)<0)
-              rows[i][cResp]=cur?cur+', '+INSPECT_EMAIL:INSPECT_EMAIL;
-          }
-          if(cRdy>=0)rows[i][cRdy]=readyQty(ids[si]);
-          if(cInsQ>=0)rows[i][cInsQ]=inspQty(ids[si]);
-          if(cRemQ>=0)rows[i][cRemQ]=remQty(ids[si]);
-          f=true;synced++;break;
-        }
+      var id=ids[si],o=ST.overrides[id];
+      if(!o||!ST._itemIdMap[id]){failed++;continue;}
+      var itemId=ST._itemIdMap[id];
+      var fields={
+        Status:o.st||'Not Started',
+        Progress:o.pc!=null?o.pc:0,
+        Notes:o.notes||'',
+        ReadyQty:readyQty(id),
+        InspectedQty:inspQty(id),
+        RemainingQty:remQty(id),
+        Timestamp:now
+      };
+      if(o.responsibleList)fields.Responsible=o.responsibleList.join('; ');
+      if(o.st==='For Inspection'){
+        var resp=(o.responsibleList?o.responsibleList.join('; '):'').trim();
+        /* Ensure inspector is in responsible field */
+        if(resp.toLowerCase().indexOf(INSPECT_EMAIL)<0)
+          fields.Responsible=resp?resp+', '+INSPECT_EMAIL:INSPECT_EMAIL;
+        else
+          fields.Responsible=resp;
       }
-      if(!f)notFound++;
+      var ok=await updateListItem(token, itemId, fields);
+      if(ok)synced++; else failed++;
     }
-    if(synced===0&&notFound>0){showToast('No matching activities found in sheet');return;}
-    ws = XLSX.utils.aoa_to_sheet(rows);
-    var maxCol = Math.max(cPc,cSt,cNote,cTs,cRdy,cInsQ,cRemQ,11);
-    ws['!ref'] = 'A1:'+XLSX.utils.encode_col(maxCol)+rows.length;
-    wb.Sheets[sn] = ws;
-    var out = XLSX.write(wb, {type:'array', bookType:'xlsx'});
-    var ok = await uploadViaGraphRetry(out, 5);
-    if(ok){
+    if(synced>0){
       ST.syncQ=0;updBadge();
-      showToast('✓ Synced '+synced+' activity'+(synced>1?'ies':'y'));
+      showToast('✓ Synced '+synced+' activity'+(synced>1?'ies':'y')+(failed?' ('+failed+' failed)':''));
     } else {
-      showToast('File locked — close Excel and try again');
+      showToast('No changes to sync');
     }
   }catch(e){console.error('[sync] batch error:', e);showToast('Sync error: '+e.message);}
   finally{ST.syncing=false;try{rProfile();}catch(e){}}
@@ -1612,76 +1804,39 @@ async function syncAll(){
 
 async function testGraph(){
   showToast('Testing Graph API…');
-  console.log('[graph] test started');
-  var buf = await fetchViaGraph();
-  if(buf===null){console.log('[graph] no token / redirect');return;}
-  if(!buf){showToast('Download failed — check console');console.log('[graph] download failed');return;}
-  console.log('[graph] download OK, size:', buf.byteLength);
-  showToast('✓ Graph API works ('+buf.byteLength+' bytes)');
+  var ok=await ensureLists();
+  if(!ok){showToast('List not found — check console');return;}
+  showToast('✓ SharePoint List OK');
 }
 
 async function saveToExcel(id, st, pc, notes, quiet){
-  console.log('[sync] saveToExcel called', id, st, pc);
-  if(!quiet)showToast('Syncing to Excel…');
-  var buf = await fetchViaGraphRetry(5);
-  console.log('[sync] fetchViaGraph result:', !!buf);
-  if(!buf){if(!quiet)showToast('File locked — close Excel and try again');return false;}
-  try{
-    var wb = XLSX.read(new Uint8Array(buf), {type:'array', raw:true, cellDates:false});
-    var sn = wb.SheetNames[0];
-    var ws = wb.Sheets[sn];
-    var rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:''});
-    if(rows.length<2)return false;
-    var cPc=-1,cSt=-1,cNote=-1,cTs=-1,cRdy=-1,cInsQ=-1,cRemQ=-1,cId=0,cResp=8;
-    if(rows[0]){
-      for(var ci=0;ci<rows[0].length;ci++){
-        var h=rows[0][ci];if(h==null)continue;
-        var hh=String(h).trim().toUpperCase();
-        if(hh==='PROGRESS')cPc=ci;
-        else if(hh==='STATUS')cSt=ci;
-        else if(hh==='NOTE'||hh==='NOTES')cNote=ci;
-        else if(hh==='TIME STAMP'||hh==='TIMESTAMP'||hh==='TIME')cTs=ci;
-        else if(hh==='READY QTY'||hh==='READY'||hh==='QUANTITY READY')cRdy=ci;
-        else if(hh==='INSPECTED QTY'||hh==='INSPECTED')cInsQ=ci;
-        else if(hh==='REMAINING QTY'||hh==='REMAINING')cRemQ=ci;
-        else if(hh==='ACTIVITY ID'||hh==='TASK ID'||hh==='ID'||hh==='WBS')cId=ci;
-        else if(hh==='RESPONSIBLE'||hh==='RESPONSIBLE RESOURCE'||hh==='RESOURCE')cResp=ci;
-      }
-    }
-    if(cPc<0&&cSt<0&&cNote<0&&cTs<0){console.log('[sync] no update columns found in header row');showToast('No update columns found in sheet');return false;}
-    var now = new Date().toISOString();
-    var found = false;
-    for(var i=1;i<rows.length;i++){
-      if(rows[i][cId]!=null&&String(rows[i][cId]).trim()===id){
-        if(cPc>=0)rows[i][cPc]=pc;
-        if(cSt>=0)rows[i][cSt]=st;
-        if(cNote>=0)rows[i][cNote]=notes||rows[i][cNote]||'';
-        if(cTs>=0)rows[i][cTs]=now;
-        var o=ST.overrides[id];
-        if(cResp>=0&&o&&o.responsibleList)rows[i][cResp]=o.responsibleList.join('; ');
-        if(st==='For Inspection'){
-          var cur=rows[i][cResp]?String(rows[i][cResp]).trim():'';
-          if(cur.toLowerCase().indexOf(INSPECT_EMAIL)<0)
-            rows[i][cResp]=cur?cur+', '+INSPECT_EMAIL:INSPECT_EMAIL;
-        }
-        if(cRdy>=0)rows[i][cRdy]=readyQty(id);
-        if(cInsQ>=0)rows[i][cInsQ]=inspQty(id);
-        if(cRemQ>=0)rows[i][cRemQ]=remQty(id);
-        found=true;console.log('[sync] updated sheet row', i);break;
-      }
-    }
-    if(!found){console.log('[sync] activity not found in sheet');showToast('Activity not found');return false;}
-    ws = XLSX.utils.aoa_to_sheet(rows);
-    var maxCol = Math.max(cPc,cSt,cNote,cTs,cRdy,cInsQ,cRemQ,11);
-    ws['!ref'] = 'A1:'+XLSX.utils.encode_col(maxCol)+rows.length;
-    wb.Sheets[sn] = ws;
-    var out = XLSX.write(wb, {type:'array', bookType:'xlsx'});
-    console.log('[sync] workbook written, size:', out.byteLength, 'bytes');
-    var ok = await uploadViaGraphRetry(out, 3);
-    console.log('[sync] upload result:', ok);
-    if(ok){ST.syncQ=Math.max(0,ST.syncQ-1);updBadge();showToast('✓ Synced to Excel');return true;}
-    else{if(!quiet)showToast('File locked — close Excel and try again');return false;}
-  }catch(e){console.error('[sync] error:', e);showToast('Sync error: '+e.message);return false;}
+  if(!ST._itemIdMap||!ST._itemIdMap[id]){console.log('[sync] no list item mapping for', id);if(!quiet)showToast('Activity not found in list');return false;}
+  var itemId=ST._itemIdMap[id];
+  var token=await getGraphToken();
+  if(!token)return false;
+  var o=ST.overrides[id];
+  var fields={
+    Status:st,
+    Progress:pc,
+    Notes:notes||'',
+    ReadyQty:readyQty(id),
+    InspectedQty:inspQty(id),
+    RemainingQty:remQty(id),
+    Timestamp:new Date().toISOString()
+  };
+  var resp=(o&&o.responsibleList?o.responsibleList.join('; '):'').trim();
+  if(st==='For Inspection'){
+    /* Ensure inspector is in the responsible field */
+    if(resp.toLowerCase().indexOf(INSPECT_EMAIL)<0)
+      fields.Responsible=resp?resp+', '+INSPECT_EMAIL:INSPECT_EMAIL;
+    else
+      fields.Responsible=resp;
+  } else {
+    if(resp)fields.Responsible=resp;
+  }
+  var ok=await updateListItem(token, itemId, fields);
+  if(ok){ST.syncQ=Math.max(0,ST.syncQ-1);updBadge();if(!quiet)showToast('✓ Synced to SharePoint');return true;}
+  else{if(!quiet)showToast('Sync failed');return false;}
 }
 
 async function saveSheet(id){
