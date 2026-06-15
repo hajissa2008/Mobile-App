@@ -1037,23 +1037,14 @@ function escH(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 
 /* ── Permission filtering ── */
 function visibleAC(){
-  if(!AUTH.user||!AUTH.user.username)return AC;
-  var e=AUTH.user.username.toLowerCase();
-  console.log('[perm] logged in as:', e);
-  console.log('[perm] sample activity:', AC[0]||'none');
-  var r=AC.filter(function(a){return!a.responsible||a.responsible===e;});
-  console.log('[perm] visible:', r.length, 'of', AC.length);
-  return r;
+  return AC;
 }
 function visiblePH(){
   var ids={};visibleAC().forEach(function(a){ids[a.ph]=1;});
   return PH.filter(function(p){return ids[p.id];});
 }
 function permBanner(){
-  var v=visibleAC();
-  if(v.length===AC.length)return'';
-  return'<div style="margin:0 16px 8px;padding:8px 12px;background:rgba(59,130,246,.08);border-radius:8px;font-size:11px;color:var(--bl);display:flex;align-items:center;gap:6px">'+
-    I.user+' Showing '+v.length+' of '+AC.length+' activities assigned to you</div>';
+  return'';
 }
 
 /* connection banner */
