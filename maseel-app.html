@@ -1043,7 +1043,7 @@ function userRole(){
 function visibleAC(){
   var role=userRole();
   console.log('[perm] role:', role, 'AC length:', AC.length, 'sample responsibleList:', AC[0]?AC[0].responsibleList:null);
-  if(role==='admin'||role==='viewer')return AC;
+  if(role==='admin'||role==='inspector'||role==='viewer')return AC;
   var e=userEmail();
   var r=AC.filter(function(a){
     if(!a.responsibleList||!a.responsibleList.length)return true;
