@@ -759,6 +759,7 @@ async function updateListItem(token, itemId, fields){
 
 /* Convert list item fields to our activity format */
 function listItemToActivity(fields, itemId){
+  function toDateStr(v){return v?new Date(v).toISOString().split('T')[0]:null;}
   var a={
     id:fields.field_2||'',
     title:fields.Title||'',
@@ -766,8 +767,8 @@ function listItemToActivity(fields, itemId){
     dur:fields.field_5,
     bls:null,
     blf:null,
-    s:fields.field_6?fields.field_6.split('T')[0]:null,
-    f:fields.field_7?fields.field_7.split('T')[0]:null,
+    s:toDateStr(fields.field_6),
+    f:toDateStr(fields.field_7),
     flt:fields.field_8,
     responsibleList:(fields.field_9||'').split(/[,;]+/).map(function(x){return x.trim().toLowerCase();}).filter(function(x){return x;}),
     totalQty:fields.field_3,
@@ -1123,7 +1124,7 @@ async function fetchLive() {
       var keys=Object.keys(items[0].fields).filter(function(k){return k!=='id'&&k!=='@odata.etag'&&k!=='ContentType';});
       console.log('[list] fields:', keys.join(', '));
       console.log('[list] sample:', JSON.stringify(items[0].fields).slice(0,800));
-      showToast('Fields: '+keys.slice(0,15).join(', '));
+      showToast('Fields ('+keys.length+'): '+keys.join(', '));
     }
     AC = items.map(function(item){return listItemToActivity(item.fields, item.id);});
     ST._itemIdMap = {}; AC.forEach(function(a){if(a._listItemId)ST._itemIdMap[a.id]=a._listItemId;});
@@ -1761,17 +1762,17 @@ async function syncAll(){
       if(!o||!ST._itemIdMap[id]){failed++;continue;}
       var itemId=ST._itemIdMap[id];
       var fields={
-        STATUS:o.st||'Not Started',
-        NOTE:o.notes||'',
-        TIME_x0020_STAMP:now
+        field_10:o.st||'Not Started',
+        field_11:o.notes||'',
+        field_12:now
       };
-      if(o.responsibleList)fields.responsible=o.responsibleList.join('; ');
+      if(o.responsibleList)fields.field_9=o.responsibleList.join('; ');
       if(o.st==='For Inspection'){
         var resp=(o.responsibleList?o.responsibleList.join('; '):'').trim();
         if(resp.toLowerCase().indexOf(INSPECT_EMAIL)<0)
-          fields.responsible=resp?resp+', '+INSPECT_EMAIL:INSPECT_EMAIL;
+          fields.field_9=resp?resp+', '+INSPECT_EMAIL:INSPECT_EMAIL;
         else
-          fields.responsible=resp;
+          fields.field_9=resp;
       }
       var ok=await updateListItem(token, itemId, fields);
       if(ok)synced++; else failed++;
@@ -1860,18 +1861,18 @@ async function saveToExcel(id, st, pc, notes, quiet){
   if(!token)return false;
   var o=ST.overrides[id];
   var fields={
-    STATUS:st,
-    NOTE:notes||'',
-    TIME_x0020_STAMP:new Date().toISOString()
+    field_10:st,
+    field_11:notes||'',
+    field_12:new Date().toISOString()
   };
   var resp=(o&&o.responsibleList?o.responsibleList.join('; '):'').trim();
   if(st==='For Inspection'){
     if(resp.toLowerCase().indexOf(INSPECT_EMAIL)<0)
-      fields.responsible=resp?resp+', '+INSPECT_EMAIL:INSPECT_EMAIL;
+      fields.field_9=resp?resp+', '+INSPECT_EMAIL:INSPECT_EMAIL;
     else
-      fields.responsible=resp;
+      fields.field_9=resp;
   } else {
-    if(resp)fields.responsible=resp;
+    if(resp)fields.field_9=resp;
   }
   var ok=await updateListItem(token, itemId, fields);
   if(ok){ST.syncQ=Math.max(0,ST.syncQ-1);updBadge();if(!quiet)showToast('✓ Synced to SharePoint');return true;}
