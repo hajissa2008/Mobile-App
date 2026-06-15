@@ -555,6 +555,18 @@ var INSPECT_EMAIL = 'h.shehata@alenshaiah.com';
 var ADMIN_EMAILS = ['m.hajissa@alenshaiah.com'];
 var INSPECTOR_EMAILS = ['h.shehata@alenshaiah.com'];
 
+/* SharePoint list connection config (stored in localStorage) */
+function listCtx(){
+  try{
+    var d=localStorage.getItem('maseel_list_ctx');
+    if(d){var o=JSON.parse(d);if(o.siteUrl&&o.listName)return o;}
+  }catch(e){}
+  return null;
+}
+function saveListCtx(siteUrl, listName){
+  try{localStorage.setItem('maseel_list_ctx',JSON.stringify({siteUrl:siteUrl,listName:listName}));}catch(e){}
+}
+
 function shareUrlToEncoded(url){
   var u = url.split('?')[0];
   var bytes = new TextEncoder().encode(u);
@@ -788,15 +800,8 @@ function loadAuth(){
     if(c){AUTH._cfg=JSON.parse(c);AUTH.enabled=true;AUTH.clientId=AUTH._cfg.clientId||'';AUTH.tenantId=AUTH._cfg.tenantId||'';}
     var p=localStorage.getItem('msal_profile');
     if(p)AUTH._profile=p;
-    /* Restore cached site ID only if URL still matches */
-    var u=localStorage.getItem('maseel_site_url');
-    if(u===SP_SHARE_URL){
-      var s=localStorage.getItem('maseel_site');if(s)SITE_ID=s;
-      var sl=localStorage.getItem('maseel_sched_list');if(sl)SCHED_LIST_ID=sl;
-    } else {
-      /* URL changed — clear old stale cache */
-      try{localStorage.removeItem('maseel_site');localStorage.removeItem('maseel_sched_list');localStorage.removeItem('maseel_phase_list');}catch(e){}
-    }
+    /* Clear old stale caches from previous sessions */
+    try{localStorage.removeItem('maseel_site');localStorage.removeItem('maseel_sched_list');localStorage.removeItem('maseel_phase_list');localStorage.removeItem('maseel_site_url');}catch(e){}
   }catch(e){}
   /* Pre-configured defaults */
   if(!AUTH.clientId)AUTH.clientId='1b3e37d8-0ba9-44b2-9033-68e4d8068a87';
@@ -1073,29 +1078,47 @@ async function fetchLive() {
   DS.state='loading'; DS.msg='Connecting to SharePoint…';
   setLoadMsg('Connecting to SharePoint…', 20);
   try {
-    setLoadMsg('Ensuring lists…', 30);
-    var ok = await ensureLists();
-    if(!ok)throw new Error('Could not find or create SharePoint lists'+(DS.errDetail?': '+DS.errDetail:''));
-    setLoadMsg('Downloading activities…', 50);
+    setLoadMsg('Looking up list…', 30);
     var token = await getGraphToken();
     if(!token)throw new Error('No Graph token');
-    var items = await fetchListActivities(token);
+    var ctx = listCtx();
+    if(!ctx.siteUrl||!ctx.listName)throw new Error('No SharePoint list configured. Go to Profile → Set List URL.');
+    if(!SITE_ID){
+      var info=siteInfoFromShareUrl(ctx.siteUrl);
+      if(!info)throw new Error('Invalid site URL');
+      var res=await fetch(GRAPH_SITES_BASE+info.host+':'+info.path, {headers:{'Authorization':'Bearer '+token}});
+      if(!res.ok)throw new Error('Site not found');
+      var site=await res.json();
+      SITE_ID=site.id;
+    }
+    setLoadMsg('Finding list…', 50);
+    if(!SCHED_LIST_ID){
+      var lres=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists?$select=id,displayName', {headers:{'Authorization':'Bearer '+token}});
+      if(!lres.ok)throw new Error('List lookup failed');
+      var ldata=await lres.json();
+      if(ldata.value){for(var i=0;i<ldata.value.length;i++){if(ldata.value[i].displayName===ctx.listName){SCHED_LIST_ID=ldata.value[i].id;break;}}}
+    }
+    if(!SCHED_LIST_ID)throw new Error('List "'+ctx.listName+'" not found on site');
+    setLoadMsg('Downloading activities…', 70);
+    var items=[],url=GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/items?expand=fields&$top=5000';
+    while(url){
+      var xres=await fetch(url, {headers:{'Authorization':'Bearer '+token}});
+      if(!xres.ok)throw new Error('List fetch failed: '+xres.status);
+      var xdata=await xres.json();
+      if(xdata.value)items=items.concat(xdata.value);
+      url=xdata['@odata.nextLink']||null;
+    }
     if(!items.length)throw new Error('No activities found in list');
-    setLoadMsg('Processing ' + items.length + ' items…', 80);
-    /* Debug: log first item's field names to diagnose column mapping */
-    if(items.length&&items[0].fields)console.log('[list] sample fields:', Object.keys(items[0].fields).slice(0,30).join(', '), JSON.stringify(items[0].fields).slice(0,500));
-    /* Convert list items to activity format */
+    setLoadMsg('Processing ' + items.length + ' items…', 85);
     AC = items.map(function(item){return listItemToActivity(item.fields, item.id);});
-    /* Build itemId lookup for writes */
     ST._itemIdMap = {}; AC.forEach(function(a){if(a._listItemId)ST._itemIdMap[a.id]=a._listItemId;});
-    /* Derive phases from activity data */
     var pmap={},order=0;
     AC.forEach(function(a){if(a.ph&&!pmap[a.ph]){pmap[a.ph]={id:a.ph,name:a.ph,order:order++,color:'#6B7280',s:null,f:null,progress:0,status:'In Progress'};}});
     PH = Object.keys(pmap).sort(function(a,b){return pmap[a].order-pmap[b].order;}).map(function(k){return pmap[k];});
     DS.state='live';
     DS.acts=AC.length;
     DS.ts=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-    DS.msg='Live · SharePoint List · '+DS.ts;
+    DS.msg='Live · '+ctx.listName+' · '+DS.ts;
     setLoadMsg('Schedule loaded ✓', 100);
   } catch(err) {
     DS.state='error';
@@ -1458,7 +1481,7 @@ function rProfile(){
         '<div class="ds-ico" style="background:'+dsCol+';color:'+dsIcoCol+'">'+
           (dsLoad?'<span class="spin">'+I.ref+'</span>':I.wifi)+'</div>'+
         '<div class="ds-info">'+
-          '<b>'+FILE_NAME+'</b>'+
+          '<b>'+(function(){var c=listCtx();return c?c.listName:'No list configured';})()+'</b>'+
           '<div class="ds-status">'+
             '<div class="dpulse '+dsDotCls+'" style="background:'+dsIcoCol+'"></div>'+
             dsStatusTxt+'</div>'+
@@ -1492,8 +1515,17 @@ function rProfile(){
       _sr(I.cal,'rgba(245,158,11,.12)','var(--a)','Data Date','3 June 2026 (Update 3)','')+
       _sr(I.zap,'rgba(239,68,68,.12)','#EF4444','Total Float','−49 days behind BL completion','')+
       _sr(I.gl,'rgba(139,92,246,.12)','var(--pu)','Duration','Oct 2025 – Jun 2027 (20 months)','')+
-      _sr(I.link,'rgba(59,130,246,.12)','var(--bl)','SharePoint',
-        '<a href="'+SP_LIST_URL+'" target="_blank" style="color:var(--bl);text-decoration:none;font-size:11px">Open in browser ↗</a>','')+
+    '</div>'+
+    '<div class="sgrp"><div class="sg-lbl">SharePoint List</div>'+
+      (function(){
+        var ctx=listCtx();
+        if(ctx)return _sr(I.link,'rgba(59,130,246,.12)','var(--bl)','Connected to',ctx.listName,
+          '<button onclick="disconnectList()" style="background:rgba(239,68,68,.1);border:0;color:#EF4444;padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit">Disconnect</button>');
+        return '<div style="padding:8px 12px;display:flex;gap:8px;align-items:center">'+
+          '<input id="list-url-input" placeholder="Paste SharePoint List URL…" style="flex:1;padding:8px 10px;border:1px solid rgba(255,255,255,.1);border-radius:6px;background:rgba(0,0,0,.2);color:#fff;font-size:12px;font-family:inherit;outline:none">'+
+          '<button onclick="connectList()" style="background:rgba(59,130,246,.15);border:0;color:#60A5FA;padding:8px 14px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap">Connect</button>'+
+          '</div>';
+      })()+
     '</div>'+
     '<div class="sgrp"><div class="sg-lbl">Integrations</div>'+
       _sr(I.cal,'rgba(59,130,246,.12)','var(--bl)','Calendar Sync',ST.calSync?'Active':'Off',
@@ -1743,12 +1775,58 @@ async function syncAll(){
 
 async function testGraph(){
   showToast('Testing Graph…');
-  var ok=await ensureLists();
-  if(!ok){showToast('List not found — check console');return;}
+  var ctx=listCtx();
+  if(!ctx){showToast('No list configured — paste URL first');return;}
   var token=await getGraphToken();
   if(!token){showToast('No token');return;}
-  var items=await fetchListActivities(token);
-  showToast('✓ List OK — '+items.length+' activities');
+  try{
+    if(!SITE_ID){
+      var info=siteInfoFromShareUrl(ctx.siteUrl);
+      if(!info)throw new Error('Bad site URL');
+      var res=await fetch(GRAPH_SITES_BASE+info.host+':'+info.path, {headers:{'Authorization':'Bearer '+token}});
+      if(!res.ok)throw new Error('Site '+res.status);
+      var site=await res.json();
+      SITE_ID=site.id;
+    }
+    if(!SCHED_LIST_ID){
+      var lres=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists?$select=id,displayName', {headers:{'Authorization':'Bearer '+token}});
+      if(!lres.ok)throw new Error('List lookup '+lres.status);
+      var ldata=await lres.json();
+      if(ldata.value){for(var i=0;i<ldata.value.length;i++){if(ldata.value[i].displayName===ctx.listName){SCHED_LIST_ID=ldata.value[i].id;break;}}}
+    }
+    if(!SCHED_LIST_ID)throw new Error('List "'+ctx.listName+'" not found');
+    showToast('✓ List OK — connected to "'+ctx.listName+'"');
+  }catch(e){showToast('✗ '+e.message);}
+}
+/* Parse SharePoint list URL to extract site URL and list name */
+function parseListUrl(url){
+  try{
+    var u=new URL(url);
+    /* Format: /sites/{site}/Lists/{name}/AllItems.aspx */
+    var m=u.pathname.match(/\/sites\/([^\/]+)\/Lists\/([^\/]+)/i);
+    if(m) return {siteUrl:'https://'+u.hostname+'/sites/'+m[1], listName:decodeURIComponent(m[2]).replace(/\.aspx$/i,'')};
+    /* Format: /:l:/s/{site}/{garbage} (sharing link) */
+    var m2=u.pathname.match(/\/:l:\/s\/([^\/]+)/i);
+    if(m2) return {siteUrl:'https://'+u.hostname+'/sites/'+m2[1], listName:''};
+    return null;
+  }catch(e){return null;}
+}
+function connectList(){
+  var el=document.getElementById('list-url-input');
+  if(!el||!el.value.trim()){showToast('Paste a SharePoint list URL');return;}
+  var parsed=parseListUrl(el.value.trim());
+  if(!parsed){showToast('Could not parse URL — use a list URL like /Lists/Name/AllItems.aspx');return;}
+  if(!parsed.listName){showToast('Sharing link not supported. Open the list in browser and copy the URL from the address bar.');return;}
+  saveListCtx(parsed.siteUrl, parsed.listName);
+  SITE_ID=null;SCHED_LIST_ID=null;
+  showToast('List configured — refreshing…');
+  refresh();
+}
+function disconnectList(){
+  try{localStorage.removeItem('maseel_list_ctx');}catch(e){}
+  SITE_ID=null;SCHED_LIST_ID=null;AC=[];PH=[];
+  try{rProfile();rToday();rTimeline();}catch(e){}
+  showToast('Disconnected');
 }
 
 async function saveToExcel(id, st, pc, notes, quiet){
