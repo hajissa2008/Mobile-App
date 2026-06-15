@@ -1935,8 +1935,12 @@ document.addEventListener('click',function(e){
   if(e)e.href=URL.createObjectURL(b);
 })();
 
-/* ── Service Worker ── */
-if('serviceWorker'in navigator){navigator.serviceWorker.register('sw.js').catch(function(){})}
+/* ── Unregister stale service workers ── */
+if('serviceWorker'in navigator){
+  navigator.serviceWorker.getRegistrations().then(function(regs){
+    regs.forEach(function(r){r.unregister();});
+  });
+}
 
 (async function(){
   /* Wait for MSAL to init */
