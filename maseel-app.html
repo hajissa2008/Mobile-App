@@ -1528,10 +1528,12 @@ function rProfile(){
         var ctx=listCtx();
         if(ctx)return _sr(I.link,'rgba(59,130,246,.12)','var(--bl)','Connected to',ctx.listName,
           '<button onclick="disconnectList()" style="background:rgba(239,68,68,.1);border:0;color:#EF4444;padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit">Disconnect</button>');
-        return '<div style="padding:8px 12px;display:flex;gap:8px;align-items:center">'+
-          '<input id="list-url-input" placeholder="Paste SharePoint List URL…" style="flex:1;padding:8px 10px;border:1px solid rgba(255,255,255,.1);border-radius:6px;background:rgba(0,0,0,.2);color:#fff;font-size:12px;font-family:inherit;outline:none">'+
-          '<button onclick="connectList()" style="background:rgba(59,130,246,.15);border:0;color:#60A5FA;padding:8px 14px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap">Connect</button>'+
-          '</div>';
+        return '<div style="padding:8px 12px">'+
+          '<input id="list-url-input" placeholder="Paste SharePoint List URL…" style="width:100%;padding:8px 10px;border:1px solid rgba(255,255,255,.1);border-radius:6px;background:rgba(0,0,0,.2);color:#fff;font-size:12px;font-family:inherit;outline:none;box-sizing:border-box;margin-bottom:6px" oninput="previewListName()">'+
+          '<div style="display:flex;gap:6px;align-items:center">'+
+            '<input id="list-name-input" placeholder="List name" style="flex:1;padding:8px 10px;border:1px solid rgba(255,255,255,.1);border-radius:6px;background:rgba(0,0,0,.2);color:#fff;font-size:12px;font-family:inherit;outline:none;box-sizing:border-box">'+
+            '<button onclick="connectList()" style="background:rgba(59,130,246,.15);border:0;color:#60A5FA;padding:8px 14px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap">Connect</button>'+
+          '</div></div>';
       })()+
     '</div>'+
     '<div class="sgrp"><div class="sg-lbl">Integrations</div>'+
@@ -1820,13 +1822,22 @@ function parseListUrl(url){
     return null;
   }catch(e){return null;}
 }
-function connectList(){
+function previewListName(){
   var el=document.getElementById('list-url-input');
-  if(!el||!el.value.trim()){showToast('Paste a SharePoint list URL');return;}
+  var nameEl=document.getElementById('list-name-input');
+  if(!el||!nameEl)return;
   var parsed=parseListUrl(el.value.trim());
-  if(!parsed){showToast('Could not parse URL — use a list URL like /Lists/Name/AllItems.aspx');return;}
-  if(!parsed.listName){showToast('Sharing link not supported. Open the list in browser and copy the URL from the address bar.');return;}
-  saveListCtx(parsed.siteUrl, parsed.listName);
+  nameEl.value=parsed&&parsed.listName?parsed.listName:'';
+}
+function connectList(){
+  var urlEl=document.getElementById('list-url-input');
+  var nameEl=document.getElementById('list-name-input');
+  if(!urlEl||!urlEl.value.trim()){showToast('Paste a SharePoint list URL');return;}
+  var parsed=parseListUrl(urlEl.value.trim());
+  if(!parsed){showToast('Could not parse URL');return;}
+  var listName=nameEl&&nameEl.value.trim()?nameEl.value.trim():parsed.listName;
+  if(!listName){showToast('Enter the list name');return;}
+  saveListCtx(parsed.siteUrl, listName);
   SITE_ID=null;SCHED_LIST_ID=null;
   showToast('List configured — refreshing…');
   refresh();
