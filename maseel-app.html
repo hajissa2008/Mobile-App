@@ -476,6 +476,7 @@ _maseel_ready = 1;
 var FILE_NAME    = 'EMSL-15-P6 Update 3-Jun-2026 G.xlsx';
 var DATA_DATE    = '2026-06-03';
 var SP_SHARE_URL = 'https://sascontractingsa.sharepoint.com/sites/Alenshaiah';
+var SP_EXCEL_URL = 'https://sascontractingsa-my.sharepoint.com/:x:/g/personal/m_hajissa_alenshaiah_com/IQBWPlRlHWXfRaDvQFQ_KwqwAev8f2TofrG6dDr2S7g3KVc?e=FdWMQt';
 var SP_LIST_URL  = 'https://sascontractingsa.sharepoint.com/:l:/s/Alenshaiah/JADTaPVa2_dMRbjaGE50d5mjAZ8Iv9JsP2DAd2G1dFjN3Gc?e=ntnnLn';
 
 /* ══════════════════════════════════════════
@@ -547,11 +548,21 @@ var AUTH = {enabled:false, clientId:'', tenantId:'', user:null, instance:null, _
 var GRAPH_SCOPE = 'https://graph.microsoft.com/Sites.ReadWrite.All';
 var MAIL_SCOPE = 'https://graph.microsoft.com/Mail.Send';
 var GRAPH_SITES_BASE = 'https://graph.microsoft.com/v1.0/sites/';
+var GRAPH_SHARE_BASE = 'https://graph.microsoft.com/v1.0/shares/';
 var LIST_NAME = 'EMSL15P6 Update 3Jun2026 G 7';
 var NOTIFY_EMAIL = 'm.hajissa@alenshaiah.com';
 var INSPECT_EMAIL = 'h.shehata@alenshaiah.com';
 var ADMIN_EMAILS = ['m.hajissa@alenshaiah.com'];
 var INSPECTOR_EMAILS = ['h.shehata@alenshaiah.com'];
+
+function shareUrlToEncoded(url){
+  var u = url.split('?')[0];
+  var bytes = new TextEncoder().encode(u);
+  var binary = '';
+  for(var i=0;i<bytes.length;i++) binary += String.fromCharCode(bytes[i]);
+  var b = btoa(binary).replace(/=+$/,'').replace(/\+/g,'-').replace(/\//g,'_');
+  return 'u!' + b;
+}
 
 async function getGraphToken(){
   if(!AUTH.instance||!AUTH.user)return null;
@@ -605,13 +616,14 @@ async function ensureSiteId(){
   }catch(e){console.error('[list] ensureSiteId error:', e);return false;}
 }
 
-/* Find the existing SharePoint list */
+/* Find the existing list or create it from the Excel file */
 async function ensureLists(){
   if(SCHED_LIST_ID)return true;
   if(!SITE_ID&&!(await ensureSiteId()))return false;
   var token=await getGraphToken();
   if(!token)return false;
   try{
+    /* Try to find existing list */
     var res=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists?$select=id,displayName', {headers:{'Authorization':'Bearer '+token}});
     if(!res.ok)throw new Error('List lookup failed: '+res.status);
     var data=await res.json();
@@ -624,7 +636,9 @@ async function ensureLists(){
       try{localStorage.setItem('maseel_sched_list',SCHED_LIST_ID);}catch(e){}
       return true;
     }
-    throw new Error('List "'+LIST_NAME+'" not found in site');
+    /* Not found — create from Excel */
+    showToast('List not found — creating from Excel…');
+    return await createAndMigrateLists(token);
   }catch(e){console.error('[list] ensureLists error:', e);return false;}
 }
 
@@ -642,6 +656,83 @@ async function fetchListActivities(token){
     url=data['@odata.nextLink']||null;
   }
   return items;
+}
+
+/* Fetch Excel file (used only for first migration) */
+async function fetchExcelBytes(token){
+  try{
+    var encoded=shareUrlToEncoded(SP_EXCEL_URL);
+    var res=await fetch(GRAPH_SHARE_BASE+encoded+'/driveItem?$select=id,parentReference', {headers:{'Authorization':'Bearer '+token}});
+    if(!res.ok)return null;
+    var item=await res.json();
+    var driveId=item.parentReference.driveId;
+    var itemId=item.id;
+    var dl=await fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+'/items/'+itemId+'/content?cb='+Date.now(), {headers:{'Authorization':'Bearer '+token}});
+    if(!dl.ok)return null;
+    return await dl.arrayBuffer();
+  }catch(e){return null;}
+}
+
+/* Create the list and import data from Excel */
+async function createAndMigrateLists(token){
+  try{
+    showToast('Creating list & importing from Excel…');
+    var schRes=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists', {
+      method:'POST',
+      headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+      body:JSON.stringify({
+        displayName:LIST_NAME,
+        description:'P6 schedule imported from Excel',
+        columns:[
+          {name:'ActivityID',text:{maxLength:255}},
+          {name:'Phase',text:{maxLength:50}},
+          {name:'Duration',number:{}},
+          {name:'BaselineStart',dateTime:{format:'dateTime'}},
+          {name:'BaselineFinish',dateTime:{format:'dateTime'}},
+          {name:'Start',dateTime:{format:'dateTime'}},
+          {name:'Finish',dateTime:{format:'dateTime'}},
+          {name:'Float',number:{}},
+          {name:'Responsible',text:{maxLength:500}},
+          {name:'TotalQty',number:{}},
+          {name:'Unit',text:{maxLength:50}},
+          {name:'Status',text:{maxLength:50}},
+          {name:'Progress',number:{}},
+          {name:'Notes',text:{maxLength:2000,allowMultipleLines:true}},
+          {name:'ReadyQty',number:{}},
+          {name:'InspectedQty',number:{}},
+          {name:'RemainingQty',number:{}},
+          {name:'Timestamp',dateTime:{format:'dateTime'}}
+        ]
+      })
+    });
+    if(!schRes.ok)throw new Error('Create list failed: '+schRes.status);
+    var sch=await schRes.json();
+    SCHED_LIST_ID=sch.id;
+    try{localStorage.setItem('maseel_sched_list',SCHED_LIST_ID);}catch(e){}
+    /* Import from Excel */
+    var buf=await fetchExcelBytes(token);
+    if(!buf){showToast('Could not read Excel file');return false;}
+    var parsed=parseP6Buffer(buf);
+    if(!parsed.activities.length)throw new Error('No activities in Excel');
+    for(var ai=0;ai<parsed.activities.length;ai++){
+      var a=parsed.activities[ai];
+      await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/items', {
+        method:'POST',
+        headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({fields:{
+          ActivityID:a.id, Title:a.title, Phase:a.ph,
+          Duration:a.dur, BaselineStart:a.bls||null, BaselineFinish:a.blf||null,
+          Start:a.s, Finish:a.f, Float:a.flt,
+          Responsible:a.responsibleList?a.responsibleList.join('; '):'',
+          TotalQty:a.totalQty||null, Unit:a.unit||'',
+          Status:a.st, Progress:a.pc, Notes:a.disc||'',
+          Timestamp:new Date().toISOString()
+        }})
+      });
+    }
+    showToast('✓ Created '+LIST_NAME+' with '+parsed.activities.length+' activities');
+    return true;
+  }catch(e){console.error('[list] createAndMigrate error:', e);showToast('Migration failed: '+e.message);return false;}
 }
 
 /* Update a single list item's fields */
