@@ -665,7 +665,9 @@ function initMsal(){
   AUTH.instance=new msal.PublicClientApplication({auth:{clientId:AUTH.clientId,authority:'https://login.microsoftonline.com/'+AUTH.tenantId,redirectUri:redirectUri}});
   AUTH.instance.handleRedirectPromise().then(function(resp){
     if(resp&&!resp.account)return;
-    if(resp&&resp.account){AUTH.user=resp.account;AUTH._profile=resp.account.name||resp.account.username||'';try{localStorage.setItem('msal_profile',AUTH._profile);}catch(e){}}
+    if(resp&&resp.account){AUTH.user=resp.account;AUTH._profile=resp.account.name||resp.account.username||'';try{localStorage.setItem('msal_profile',AUTH._profile);}catch(e){}
+      /* Fetch fresh data from SharePoint now that we're authenticated */
+      fetchLive().then(function(){try{rToday();}catch(e){}try{rTimeline();}catch(e){}try{rProfile();}catch(e){}}).catch(function(){});}
     try{hideLoginScreen();}catch(e){}
     try{rProfile();}catch(e){}
     /* Check if we were in the middle of something before redirect */
@@ -935,15 +937,25 @@ async function fetchLive() {
     setLoadMsg('Schedule loaded ✓', 100);
 
   } catch(err) {
-    /* Fall back to embedded data */
-    PH = PH_FALLBACK.slice();
-    AC = AC_FALLBACK.slice();
-    DS.state='cached';
-    DS.acts=AC.length;
-    DS.ts='3 Jun 2026';
-    DS.error=err.message||'Fetch failed';
-    DS.msg='Using cached schedule · '+DATA_DATE;
-    setLoadMsg('Using cached data', 100);
+    if(AUTH.user){
+      /* Authenticated but fetch failed — show error, don't use cached data */
+      PH = []; AC = [];
+      DS.state='error';
+      DS.acts=0;
+      DS.error=err.message||'Fetch failed';
+      DS.msg='Failed to load from SharePoint';
+      setLoadMsg('Error: '+DS.error, 0);
+    } else {
+      /* Not authenticated — fall back to embedded cached data */
+      PH = PH_FALLBACK.slice();
+      AC = AC_FALLBACK.slice();
+      DS.state='cached';
+      DS.acts=AC.length;
+      DS.ts='3 Jun 2026';
+      DS.error=err.message||'Fetch failed';
+      DS.msg='Using cached schedule · '+DATA_DATE;
+      setLoadMsg('Using cached data', 100);
+    }
   }
 }
 
@@ -952,7 +964,7 @@ async function refresh() {
   rProfile();
   await fetchLive();
   rToday(); rTimeline(); rProfile();
-  showToast(DS.state==='live'?'✓ Schedule updated from '+(DS.msg.match(/·\s*(\S+)\s*·/)||['',''])[1]||'server':'Using cached data: '+DS.error.substring(0,50));
+  showToast(DS.state==='live'?'✓ '+DS.acts+' activities updated':'✗ Failed: '+DS.error.substring(0,50));
 }
 
 var LAST_CHECK = 0;
