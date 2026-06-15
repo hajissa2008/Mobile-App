@@ -1041,24 +1041,28 @@ function circInner(s){if(s==='Done')return I.chkW;if(s==='In Progress')return I.
 function escH(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 /* ── Permission filtering ── */
-function userEmail(){return AUTH.user&&AUTH.user.username?AUTH.user.username.toLowerCase():'';}
+function userEmail(){return AUTH.user&&AUTH.user.username?AUTH.user.username.toLowerCase():AUTH.user&&AUTH.user.idTokenClaims&&AUTH.user.idTokenClaims.preferred_username?AUTH.user.idTokenClaims.preferred_username.toLowerCase():AUTH.user&&AUTH.user.idTokenClaims&&AUTH.user.idTokenClaims.email?AUTH.user.idTokenClaims.email.toLowerCase():'';}
 function userRole(){
   var e=userEmail();
+  console.log('[role] userEmail:', JSON.stringify(e), 'ADMIN_EMAILS:', ADMIN_EMAILS, 'match:', ADMIN_EMAILS.indexOf(e)>=0||ADMIN_EMAILS.some(function(a){return e.indexOf(a)>=0||a.indexOf(e)>=0;}));
   if(!e)return'viewer';
-  if(ADMIN_EMAILS.indexOf(e)>=0)return'admin';
-  if(INSPECTOR_EMAILS.indexOf(e)>=0)return'inspector';
+  if(ADMIN_EMAILS.some(function(a){return e.indexOf(a)>=0||a.indexOf(e)>=0;}))return'admin';
+  if(INSPECTOR_EMAILS.some(function(a){return e.indexOf(a)>=0||a.indexOf(e)>=0;}))return'inspector';
   return'user';
 }
 function visibleAC(){
   var role=userRole();
+  console.log('[perm] role:', role, 'AC length:', AC.length, 'sample responsibleList:', AC[0]?AC[0].responsibleList:null);
   if(role==='admin'||role==='viewer')return AC;
   var e=userEmail();
-  return AC.filter(function(a){
+  var r=AC.filter(function(a){
     if(!a.responsibleList||!a.responsibleList.length)return true;
     if(a.responsibleList.indexOf(e)>=0)return true;
     if(role==='inspector'&&a.st==='For Inspection')return true;
     return false;
   });
+  console.log('[perm] filtered:', r.length, 'of', AC.length);
+  return r;
 }
 function visiblePH(){
   var ids={};visibleAC().forEach(function(a){ids[a.ph]=1;});
@@ -1068,8 +1072,11 @@ function permBanner(){
   var role=userRole();
   if(role==='viewer')return'';
   var v=visibleAC(),roleLabel=role==='admin'?'Admin':role==='inspector'?'Inspector':'User';
+  var e=userEmail();
   return'<div style="margin:0 16px 8px;padding:8px 12px;background:rgba(59,130,246,.08);border-radius:8px;font-size:11px;color:var(--bl);display:flex;align-items:center;gap:6px">'+
-    I.user+' '+roleLabel+' — showing '+v.length+' of '+AC.length+' activities</div>';
+    I.user+' '+roleLabel+' ('+e+') — showing '+v.length+' of '+AC.length+' activities · '+
+    PH.length+' phases, '+(PH[0]?PH[0].id:'?')+', '+(PH[1]?PH[1].id:'?')+', '+(PH[2]?PH[2].id:'?')+
+    '</div>';
 }
 
 /* connection banner */
