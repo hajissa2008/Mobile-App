@@ -603,29 +603,28 @@ function siteInfoFromShareUrl(url){
 async function ensureSiteId(){
   if(SITE_ID)return true;
   var token=await getGraphToken();
-  if(!token)return false;
+  if(!token){DS.errDetail='No Graph token for site lookup';console.error('[list] ensureSiteId: no token');return false;}
   try{
     var info=siteInfoFromShareUrl(SP_SHARE_URL);
-    if(!info)throw new Error('Could not parse share URL');
+    if(!info){DS.errDetail='Could not parse site URL: '+SP_SHARE_URL;throw new Error('Could not parse share URL');}
     var res=await fetch(GRAPH_SITES_BASE+info.host+':'+info.path, {headers:{'Authorization':'Bearer '+token}});
-    if(!res.ok)throw new Error('Site lookup failed: '+res.status);
+    if(!res.ok){DS.errDetail='Site lookup HTTP '+res.status;throw new Error('Site lookup failed: '+res.status);}
     var site=await res.json();
     SITE_ID=site.id;
-    try{localStorage.setItem('maseel_site',SITE_ID);}catch(e){}
+    try{localStorage.setItem('maseel_site',SITE_ID);localStorage.setItem('maseel_site_url',SP_SHARE_URL);}catch(e){}
     return true;
-  }catch(e){console.error('[list] ensureSiteId error:', e);return false;}
+  }catch(e){console.error('[list] ensureSiteId error:', e);DS.errDetail=DS.errDetail||e.message;return false;}
 }
 
 /* Find the existing list or create it from the Excel file */
 async function ensureLists(){
   if(SCHED_LIST_ID)return true;
-  if(!SITE_ID&&!(await ensureSiteId()))return false;
+  if(!SITE_ID&&!(await ensureSiteId())){DS.errDetail='ensureSiteId failed';return false;}
   var token=await getGraphToken();
-  if(!token)return false;
+  if(!token){DS.errDetail='No Graph token';return false;}
   try{
-    /* Try to find existing list */
     var res=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists?$select=id,displayName', {headers:{'Authorization':'Bearer '+token}});
-    if(!res.ok)throw new Error('List lookup failed: '+res.status);
+    if(!res.ok){DS.errDetail='List lookup HTTP '+res.status;throw new Error('List lookup failed: '+res.status);}
     var data=await res.json();
     if(data.value){
       for(var i=0;i<data.value.length;i++){
@@ -633,13 +632,12 @@ async function ensureLists(){
       }
     }
     if(SCHED_LIST_ID){
-      try{localStorage.setItem('maseel_sched_list',SCHED_LIST_ID);}catch(e){}
+      try{localStorage.setItem('maseel_sched_list',SCHED_LIST_ID);localStorage.setItem('maseel_site_url',SP_SHARE_URL);}catch(e){}
       return true;
     }
-    /* Not found — create from Excel */
-    showToast('List not found — creating from Excel…');
+    DS.errDetail='List "'+LIST_NAME+'" not found, creating…';
     return await createAndMigrateLists(token);
-  }catch(e){console.error('[list] ensureLists error:', e);return false;}
+  }catch(e){console.error('[list] ensureLists error:', e);DS.errDetail=DS.errDetail||e.message;return false;}
 }
 
 
@@ -705,15 +703,17 @@ async function createAndMigrateLists(token){
         ]
       })
     });
-    if(!schRes.ok)throw new Error('Create list failed: '+schRes.status);
+    if(!schRes.ok){DS.errDetail='Create list HTTP '+schRes.status;throw new Error('Create list failed: '+schRes.status);}
     var sch=await schRes.json();
     SCHED_LIST_ID=sch.id;
-    try{localStorage.setItem('maseel_sched_list',SCHED_LIST_ID);}catch(e){}
+    try{localStorage.setItem('maseel_sched_list',SCHED_LIST_ID);localStorage.setItem('maseel_site_url',SP_SHARE_URL);}catch(e){}
     /* Import from Excel */
+    DS.errDetail='Downloading Excel…';
     var buf=await fetchExcelBytes(token);
-    if(!buf){showToast('Could not read Excel file');return false;}
+    if(!buf){DS.errDetail='Excel download failed';showToast('Could not read Excel file');return false;}
     var parsed=parseP6Buffer(buf);
-    if(!parsed.activities.length)throw new Error('No activities in Excel');
+    if(!parsed.activities.length){DS.errDetail='No activities in Excel';throw new Error('No activities in Excel');}
+    DS.errDetail='Importing '+parsed.activities.length+' activities…';
     for(var ai=0;ai<parsed.activities.length;ai++){
       var a=parsed.activities[ai];
       await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/items', {
@@ -732,7 +732,7 @@ async function createAndMigrateLists(token){
     }
     showToast('✓ Created '+LIST_NAME+' with '+parsed.activities.length+' activities');
     return true;
-  }catch(e){console.error('[list] createAndMigrate error:', e);showToast('Migration failed: '+e.message);return false;}
+  }catch(e){console.error('[list] createAndMigrate error:', e);DS.errDetail=DS.errDetail||e.message;showToast('Migration failed: '+e.message);return false;}
 }
 
 /* Update a single list item's fields */
@@ -788,9 +788,15 @@ function loadAuth(){
     if(c){AUTH._cfg=JSON.parse(c);AUTH.enabled=true;AUTH.clientId=AUTH._cfg.clientId||'';AUTH.tenantId=AUTH._cfg.tenantId||'';}
     var p=localStorage.getItem('msal_profile');
     if(p)AUTH._profile=p;
-    /* Restore cached site/list IDs */
-    var s=localStorage.getItem('maseel_site');if(s)SITE_ID=s;
-    var sl=localStorage.getItem('maseel_sched_list');if(sl)SCHED_LIST_ID=sl;
+    /* Restore cached site ID only if URL still matches */
+    var u=localStorage.getItem('maseel_site_url');
+    if(u===SP_SHARE_URL){
+      var s=localStorage.getItem('maseel_site');if(s)SITE_ID=s;
+      var sl=localStorage.getItem('maseel_sched_list');if(sl)SCHED_LIST_ID=sl;
+    } else {
+      /* URL changed — clear old stale cache */
+      try{localStorage.removeItem('maseel_site');localStorage.removeItem('maseel_sched_list');localStorage.removeItem('maseel_phase_list');}catch(e){}
+    }
   }catch(e){}
   /* Pre-configured defaults */
   if(!AUTH.clientId)AUTH.clientId='1b3e37d8-0ba9-44b2-9033-68e4d8068a87';
@@ -1069,7 +1075,7 @@ async function fetchLive() {
   try {
     setLoadMsg('Ensuring lists…', 30);
     var ok = await ensureLists();
-    if(!ok)throw new Error('Could not find or create SharePoint lists');
+    if(!ok)throw new Error('Could not find or create SharePoint lists'+(DS.errDetail?': '+DS.errDetail:''));
     setLoadMsg('Downloading activities…', 50);
     var token = await getGraphToken();
     if(!token)throw new Error('No Graph token');
