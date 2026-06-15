@@ -530,6 +530,8 @@ function addIns(id,qty,result){
     else{ST.overrides[id].st='Partially Inspected';ST.overrides[id].pc=Math.round(ins/tot*100);showToast('! Partially inspected — status updated');}
     saveOverrides();
   }
+  ST.syncQ++;updBadge();
+  if(!ST._syncTimer)ST._syncTimer=setTimeout(function(){ST._syncTimer=null;syncAll();},5000);
 }
 function loadPhotos(){try{var d=localStorage.getItem('maseel_photos');return d?JSON.parse(d):{};}catch(e){return {};}}
 function savePhotos(p){try{localStorage.setItem('maseel_photos',JSON.stringify(p));}catch(e){}}
