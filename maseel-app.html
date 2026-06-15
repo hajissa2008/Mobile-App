@@ -1058,7 +1058,7 @@ function visibleAC(){
   var r=AC.filter(function(a){
     if(!a.responsibleList||!a.responsibleList.length)return true;
     if(a.responsibleList.indexOf(e)>=0)return true;
-    if(role==='inspector'&&a.st==='For Inspection')return true;
+    if(role==='inspector'&&effSt(a)==='For Inspection')return true;
     return false;
   });
   console.log('[perm] filtered:', r.length, 'of', AC.length);
