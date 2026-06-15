@@ -765,8 +765,8 @@ function parseP6Buffer(buffer) {
   var rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:null});
   if (rows.length < 2) throw new Error('Empty sheet');
 
-  /* Find Total Qty column from header row */
-  var colTq=-1, colUnit=-1;
+  /* Find all columns by header name (supports column reordering/insertion) */
+  var colTq=-1, colUnit=-1, colId=0, colTitle=1, colDur=2, colBls=3, colBlf=4, colStart=5, colFin=6, colFloat=7, colResp=8;
   if(rows[0]){
     for(var ci=0;ci<rows[0].length;ci++){
       var hh=rows[0][ci];
@@ -774,6 +774,15 @@ function parseP6Buffer(buffer) {
       var hs=String(hh).trim().toUpperCase();
       if(hs==='TOTAL QUANTITY'||hs==='QTY'||hs==='QUANTITY')colTq=ci;
       else if(hs==='UNIT'||hs==='UOM'||hs==='UNIT OF MEASUREMENT')colUnit=ci;
+      else if(hs==='ACTIVITY ID'||hs==='TASK ID'||hs==='ID'||hs==='WBS')colId=ci;
+      else if(hs==='ACTIVITY NAME'||hs==='ACTIVITY'||hs==='TASK NAME'||hs==='TITLE')colTitle=ci;
+      else if(hs==='ORIGINAL DURATION'||hs==='DURATION'||hs==='DUR')colDur=ci;
+      else if(hs==='BL START'||hs==='BASELINE START'||hs==='PLANNED START')colBls=ci;
+      else if(hs==='BL FINISH'||hs==='BASELINE FINISH'||hs==='PLANNED FINISH')colBlf=ci;
+      else if(hs==='START'||hs==='ACTUAL START')colStart=ci;
+      else if(hs==='FINISH'||hs==='ACTUAL FINISH')colFin=ci;
+      else if(hs==='TOTAL FLOAT'||hs==='FLOAT')colFloat=ci;
+      else if(hs==='RESPONSIBLE'||hs==='RESPONSIBLE RESOURCE'||hs==='RESOURCE')colResp=ci;
     }
   }
 
@@ -783,7 +792,7 @@ function parseP6Buffer(buffer) {
 
   for (var i=1; i<rows.length; i++) {
     var row = rows[i];
-    var actId = row[0]; if (actId==null) continue;
+    var actId = row[colId]; if (actId==null) continue;
     var raw = String(actId);
     var stripped = raw.trim();
     var indent = raw.length - stripped.length;
@@ -795,10 +804,10 @@ function parseP6Buffer(buffer) {
       var lvls = Object.keys(pathStack).map(Number).filter(function(l){return l<indent;}).sort(function(a,b){return a-b;});
       for (var li=0; li<lvls.length; li++) path.push(pathStack[lvls[li]].trim());
 
-      var bl_s = xlDateToISO(row[3]), bl_f = xlDateToISO(row[4]);
-      var st_v = row[5], fn_v = row[6];
+      var bl_s = xlDateToISO(row[colBls]), bl_f = xlDateToISO(row[colBlf]);
+      var st_v = row[colStart], fn_v = row[colFin];
       var s = xlDateToISO(st_v), f = xlDateToISO(fn_v);
-      var flt = row[7]!=null ? Math.round(parseFloat(row[7])) : null;
+      var flt = row[colFloat]!=null ? Math.round(parseFloat(row[colFloat])) : null;
       var started = isActual(st_v);
 
       /* Resolve phase + discipline */
@@ -823,12 +832,12 @@ function parseP6Buffer(buffer) {
       if(colTq>=0&&row[colTq]!=null&&row[colTq]!=='')tq=parseFloat(row[colTq])||null;
       phaseBuckets[phId].push({
         id:stripped, ph:phId, disc:disc||'',
-        title:(row[1]||'').trim(),
+        title:(row[colTitle]||'').trim(),
         s:es||DATA_DATE, f:ef||DATA_DATE,
         st:status,
         pc:status==='Done'?100:status==='In Progress'?50:0,
-        float:flt, dur:parseInt(row[2])||0,
-        responsible:(row[8]||'').toString().trim().toLowerCase(),
+        float:flt, dur:parseInt(row[colDur])||0,
+        responsible:(row[colResp]||'').toString().trim().toLowerCase(),
         totalQty:tq,
         unit:colUnit>=0&&row[colUnit]?String(row[colUnit]).trim():''
       });
@@ -913,7 +922,10 @@ async function fetchLive() {
     }
     if(!source){
       try {
-        var res = await fetch(SP_DL_URL, {credentials:'include', signal: controller ? controller.signal : undefined});
+        var controller2 = typeof AbortController!=='undefined' ? new AbortController() : null;
+        var tid2 = controller2 ? setTimeout(function(){controller2.abort();}, 15000) : null;
+        var res = await fetch(SP_DL_URL, {signal: controller2 ? controller2.signal : undefined});
+        if(tid2)clearTimeout(tid2);
         if(res.ok){buf=await res.arrayBuffer();source='SharePoint';}
       } catch(e3){}
     }
@@ -1503,7 +1515,7 @@ async function syncAll(){
     var ws = wb.Sheets[sn];
     var rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:''});
     if(rows.length<2)return;
-    var cPc=-1,cSt=-1,cNote=-1,cTs=-1,cRdy=-1,cInsQ=-1,cRemQ=-1;
+    var cPc=-1,cSt=-1,cNote=-1,cTs=-1,cRdy=-1,cInsQ=-1,cRemQ=-1,cId=0,cResp=8;
     if(rows[0]){
       for(var ci=0;ci<rows[0].length;ci++){
         var h=rows[0][ci];if(h==null)continue;
@@ -1515,6 +1527,8 @@ async function syncAll(){
         else if(hh==='READY QTY'||hh==='READY'||hh==='QUANTITY READY')cRdy=ci;
         else if(hh==='INSPECTED QTY'||hh==='INSPECTED')cInsQ=ci;
         else if(hh==='REMAINING QTY'||hh==='REMAINING')cRemQ=ci;
+        else if(hh==='ACTIVITY ID'||hh==='TASK ID'||hh==='ID'||hh==='WBS')cId=ci;
+        else if(hh==='RESPONSIBLE'||hh==='RESPONSIBLE RESOURCE'||hh==='RESOURCE')cResp=ci;
       }
     }
     if(cPc<0&&cSt<0&&cNote<0&&cTs<0){showToast('No update columns found in sheet');return;}
@@ -1524,15 +1538,15 @@ async function syncAll(){
       var o=ST.overrides[ids[si]];if(!o)continue;
       var f=false;
       for(var i=1;i<rows.length;i++){
-        if(rows[i][0]!=null&&String(rows[i][0]).trim()===ids[si]){
+        if(rows[i][cId]!=null&&String(rows[i][cId]).trim()===ids[si]){
           if(cPc>=0)rows[i][cPc]=o.pc!=null?o.pc:0;
           if(cSt>=0)rows[i][cSt]=o.st||'Not Started';
           if(cNote>=0)rows[i][cNote]=o.notes||rows[i][cNote]||'';
           if(cTs>=0)rows[i][cTs]=now;
           if(o.st==='For Inspection'){
-            var cur=rows[i][8]?String(rows[i][8]).trim():'';
+            var cur=rows[i][cResp]?String(rows[i][cResp]).trim():'';
             if(cur.toLowerCase().indexOf(INSPECT_EMAIL)<0)
-              rows[i][8]=cur?cur+', '+INSPECT_EMAIL:INSPECT_EMAIL;
+              rows[i][cResp]=cur?cur+', '+INSPECT_EMAIL:INSPECT_EMAIL;
           }
           if(cRdy>=0)rows[i][cRdy]=readyQty(ids[si]);
           if(cInsQ>=0)rows[i][cInsQ]=inspQty(ids[si]);
@@ -1581,7 +1595,7 @@ async function saveToExcel(id, st, pc, notes, quiet){
     var ws = wb.Sheets[sn];
     var rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:''});
     if(rows.length<2)return false;
-    var cPc=-1,cSt=-1,cNote=-1,cTs=-1,cRdy=-1,cInsQ=-1,cRemQ=-1;
+    var cPc=-1,cSt=-1,cNote=-1,cTs=-1,cRdy=-1,cInsQ=-1,cRemQ=-1,cId=0,cResp=8;
     if(rows[0]){
       for(var ci=0;ci<rows[0].length;ci++){
         var h=rows[0][ci];if(h==null)continue;
@@ -1593,21 +1607,23 @@ async function saveToExcel(id, st, pc, notes, quiet){
         else if(hh==='READY QTY'||hh==='READY'||hh==='QUANTITY READY')cRdy=ci;
         else if(hh==='INSPECTED QTY'||hh==='INSPECTED')cInsQ=ci;
         else if(hh==='REMAINING QTY'||hh==='REMAINING')cRemQ=ci;
+        else if(hh==='ACTIVITY ID'||hh==='TASK ID'||hh==='ID'||hh==='WBS')cId=ci;
+        else if(hh==='RESPONSIBLE'||hh==='RESPONSIBLE RESOURCE'||hh==='RESOURCE')cResp=ci;
       }
     }
     if(cPc<0&&cSt<0&&cNote<0&&cTs<0){console.log('[sync] no update columns found in header row');showToast('No update columns found in sheet');return false;}
     var now = new Date().toISOString();
     var found = false;
     for(var i=1;i<rows.length;i++){
-      if(rows[i][0]!=null&&String(rows[i][0]).trim()===id){
+      if(rows[i][cId]!=null&&String(rows[i][cId]).trim()===id){
         if(cPc>=0)rows[i][cPc]=pc;
         if(cSt>=0)rows[i][cSt]=st;
         if(cNote>=0)rows[i][cNote]=notes||rows[i][cNote]||'';
         if(cTs>=0)rows[i][cTs]=now;
         if(st==='For Inspection'){
-          var cur=rows[i][8]?String(rows[i][8]).trim():'';
+          var cur=rows[i][cResp]?String(rows[i][cResp]).trim():'';
           if(cur.toLowerCase().indexOf(INSPECT_EMAIL)<0)
-            rows[i][8]=cur?cur+', '+INSPECT_EMAIL:INSPECT_EMAIL;
+            rows[i][cResp]=cur?cur+', '+INSPECT_EMAIL:INSPECT_EMAIL;
         }
         if(cRdy>=0)rows[i][cRdy]=readyQty(id);
         if(cInsQ>=0)rows[i][cInsQ]=inspQty(id);
