@@ -954,25 +954,15 @@ async function fetchLive() {
     setLoadMsg('Schedule loaded ✓', 100);
 
   } catch(err) {
-    if(AUTH.user){
-      /* Authenticated but fetch failed — show error, don't use cached data */
-      PH = []; AC = [];
-      DS.state='error';
-      DS.acts=0;
-      DS.error=err.message||'Fetch failed';
-      DS.msg='Failed to load from SharePoint';
-      setLoadMsg('Error: '+DS.error, 0);
-    } else {
-      /* Not authenticated — fall back to embedded cached data */
-      PH = PH_FALLBACK.slice();
-      AC = AC_FALLBACK.slice();
-      DS.state='cached';
-      DS.acts=AC.length;
-      DS.ts='3 Jun 2026';
-      DS.error=err.message||'Fetch failed';
-      DS.msg='Using cached schedule · '+DATA_DATE;
-      setLoadMsg('Using cached data', 100);
-    }
+    /* Fall back to embedded cached data */
+    PH = PH_FALLBACK.slice();
+    AC = AC_FALLBACK.slice();
+    DS.state='cached';
+    DS.acts=AC.length;
+    DS.ts='3 Jun 2026';
+    DS.error=err.message||'Fetch failed';
+    DS.msg='Using cached schedule · '+DATA_DATE+(AUTH.user?' · live unavailable':'');
+    setLoadMsg('Using cached data', 100);
   }
 }
 
@@ -981,7 +971,7 @@ async function refresh() {
   rProfile();
   await fetchLive();
   rToday(); rTimeline(); rProfile();
-  showToast(DS.state==='live'?'✓ '+DS.acts+' activities updated':'✗ Failed: '+DS.error.substring(0,50));
+  showToast(DS.state==='live'?'✓ '+DS.acts+' activities updated':DS.state==='cached'?'Cached data — live unavailable':'✗ Failed: '+DS.error.substring(0,50));
 }
 
 var LAST_CHECK = 0;
