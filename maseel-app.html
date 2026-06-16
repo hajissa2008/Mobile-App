@@ -775,7 +775,7 @@ function listItemToActivity(fields, itemId){
     s:toDateStr(fields.field_6),
     f:toDateStr(fields.field_7),
     flt:num(fields.field_9),
-    responsibleList:str(fields.field_8).split(/[,;]+/).map(function(x){return x.trim().toLowerCase();}).filter(function(x){return x;}),
+    responsibleList:(function(){var r=fields.Responsible||fields.field_8||fields.field_9||'';return str(r).split(/[,;]+/).map(function(x){return x.trim().toLowerCase();}).filter(function(x){return x;});})(),
     totalQty:num(fields.field_3),
     unit:str(fields.field_4),
     st:str(fields.field_10)||'Not Started',
