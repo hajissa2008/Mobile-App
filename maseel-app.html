@@ -529,8 +529,8 @@ function addIns(id,qty,result){
   saveOverrides();
   var a=acOf(id),tot=a?a.totalQty||readyQty(id):0,ins=inspQty(id);
   if(tot>0&&ins>0){
-    if(ins>=tot){ST.overrides[id].st='Done';ST.overrides[id].pc=100;showToast('✓ All quantity inspected — status set to Done');}
-    else{ST.overrides[id].st='Partially Inspected';ST.overrides[id].pc=Math.round(ins/tot*100);showToast('! Partially inspected — status updated');}
+    if(ins>=tot){ST.overrides[id].st='Done';showToast('✓ All quantity inspected — status set to Done');}
+    else{ST.overrides[id].st='Partially Inspected';showToast('! Partially inspected — status updated');}
     saveOverrides();
   }
   ST.syncQ++;updBadge();
@@ -1184,7 +1184,14 @@ function acOf(id){for(var i=0;i<AC.length;i++)if(AC[i].id===id)return AC[i];retu
 function sk(s){return s==='Not Started'?'ns':s==='In Progress'?'ip':s==='Done'?'dn':s==='Partially Inspected'?'pi':'fi';}
 function eff(a){return(ST.overrides[a.id]||{});}
 function effSt(a){return eff(a).st||a.st;}
-function effPc(a){var o=eff(a);return o.pc!=null?o.pc:a.pc;}
+function effPc(a){
+  var o=eff(a);
+  if(o&&o.ins&&o.ins.length){
+    var tot=acOf(a.id)&&acOf(a.id).totalQty||readyQty(a.id);
+    if(tot>0)return Math.round(inspQty(a.id)/tot*100);
+  }
+  return o.pc!=null?o.pc:a.pc;
+}
 var COL={P1:'#F59E0B',P2:'#3B82F6',P3:'#10B981',P4:'#EF4444',P5:'#F97316',SD:'#8B5CF6',MOB:'#6B7280',ML:'#EC4899'};
 
 var I={
