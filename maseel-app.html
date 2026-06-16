@@ -1415,8 +1415,8 @@ function rTimeline(){
       '<div class="ovr-bar"><div class="ovr-fill" style="width:'+ovr+'%"></div></div>'+
       '<div class="ovr-dates"><span>Oct 2025</span><span>Jun 2027</span></div>'+
       '<div class="ph-pills">';
-  for(var pi=0;pi<phIds.length;pi++){
-    var ph=phOf(phIds[pi])||(phIds[pi]===''?{name:'All',color:'#8B9BB4',progress:0}:null);
+  for(var pi=0;pi<phOrder.length;pi++){
+    var ph=phOf(phOrder[pi])||(phOrder[pi]===''?{name:'All',color:'#8B9BB4',progress:0}:null);
     if(!ph)continue;
     h+='<div class="ph-pill" title="'+ph.name+'"><div class="ph-pill-bg"></div>'+
       '<div class="ph-pill-fill" style="background:'+ph.color+';width:'+(ph.progress>0?ph.progress:0)+'%"></div></div>';
@@ -1426,10 +1426,10 @@ function rTimeline(){
   /* Build visible phases set */
   var vPhIds={};
   for(var i=0;i<vAC.length;i++)vPhIds[effPh(vAC[i].id)]=1;
-  if(!phIds.length)phIds=['Unassigned'];
-  if(phIds.indexOf('Unassigned')<0&&vPhIds['Unassigned'])phIds.unshift('Unassigned');
-  for(var pi=0;pi<phIds.length;pi++){
-    var phId=phIds[pi],ph=phOf(phId)||(phId==='Unassigned'?{id:'Unassigned',name:'Unassigned',color:'#6B7280',progress:0,s:null,f:null}:null);
+  if(!phOrder.length)phOrder=['Unassigned'];
+  if(phOrder.indexOf('Unassigned')<0&&vPhIds['Unassigned'])phOrder.unshift('Unassigned');
+  for(var pi=0;pi<phOrder.length;pi++){
+    var phId=phOrder[pi],ph=phOf(phId)||(phId==='Unassigned'?{id:'Unassigned',name:'Unassigned',color:'#6B7280',progress:0,s:null,f:null}:null);
     if(!ph&&!q)continue;
     if(!vPhIds[phId]&&!q)continue;
     var acts=[];
