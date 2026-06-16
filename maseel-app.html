@@ -534,7 +534,7 @@ function addIns(id,qty,result){
     saveOverrides();
   }
   ST.syncQ++;updBadge();
-  if(!ST._syncTimer)ST._syncTimer=setTimeout(function(){ST._syncTimer=null;syncAll();},5000);
+  syncAll();
 }
 function loadPhotos(){try{var d=localStorage.getItem('maseel_photos');return d?JSON.parse(d):{};}catch(e){return {};}}
 function savePhotos(p){try{localStorage.setItem('maseel_photos',JSON.stringify(p));}catch(e){}}
@@ -1762,8 +1762,6 @@ function recordIns(id,result){
   if(remQty(id)<q){showToast('Cannot inspect more than remaining qty');return;}
   addIns(id,q,result);
   showToast('✓ '+q+' inspected ('+result+')');
-  ST.syncQ++;updBadge();
-  if(!ST._syncTimer)ST._syncTimer=setTimeout(function(){ST._syncTimer=null;syncAll();},5000);
   openSheet(id);
   if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();
 }
@@ -1782,7 +1780,7 @@ function updateReadyQty(id){
     saveOverrides();
   }else{showToast('✓ Ready quantity set to '+v);}
   ST.syncQ++;updBadge();
-  if(!ST._syncTimer)ST._syncTimer=setTimeout(function(){ST._syncTimer=null;syncAll();},5000);
+  syncAll();
   openSheet(id);
   if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();
 }
@@ -1824,7 +1822,7 @@ async function syncAll(){
       showToast('No changes to sync');
     }
   }catch(e){console.error('[sync] batch error:', e);showToast('Sync error: '+e.message);}
-  finally{ST.syncing=false;try{rProfile();}catch(e){}}
+  finally{ST.syncing=false;try{if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();else rProfile();}catch(e){}}
 }
 
 async function testGraph(){
@@ -1930,7 +1928,7 @@ async function saveSheet(id){
   if(finalSt==='For Inspection')sendInspectionEmail(id, a?a.title:'');
   else if(finalSt==='Partially Inspected'||finalSt==='Done')sendReadyEmail(id, a?a.title:'');
   await saveToExcel(id, finalSt, finalPc, notes);
-  if(ST.syncQ>0)setTimeout(syncAll,3000);
+  syncAll();
 }
 async function getMailToken(){
   if(!AUTH.instance||!AUTH.user)return null;
@@ -2072,7 +2070,7 @@ function cycSt(id){
   ST.overrides[id].st=nxt;ST.overrides[id].pc=nxt==='Done'?100:nxt==='Not Started'?0:50;
   saveOverrides();ST.syncQ++;updBadge();
   if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();else rProfile();
-  showToast('→ '+nxt);
+  showToast('→ '+nxt);syncAll();
 }
 function setTodayFilter(k){ST.todayFilter=ST.todayFilter===k?'':k;rToday();}
 function dimB(){ST.banner=false;var b=document.getElementById('notif');if(b)b.classList.add('gone');}
