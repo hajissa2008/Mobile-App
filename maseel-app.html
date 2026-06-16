@@ -1756,7 +1756,7 @@ function inspSection(id){
     '<div style="margin-top:4px">'+
       '<label style="font-size:10px;color:var(--t3);display:block;margin-bottom:2px">Qty Ready for Inspection</label>'+
       '<div style="display:flex;gap:6px;align-items:center">'+
-        '<input id="irqinp" type="number" min="0" value="'+(rq||0)+'" style="width:80px;padding:6px 8px;border-radius:6px;border:1px solid var(--br);background:var(--bg2);color:var(--t1);font-size:13px;height:34px;box-sizing:border-box" onfocus="this.select()">'+
+        '<input id="irqinp" type="number" min="0" value="'+(ST.overrides[id]&&ST.overrides[id].readyQty!==undefined?ST.overrides[id].readyQty:a.totalQty||0)+'" style="width:80px;padding:6px 8px;border-radius:6px;border:1px solid var(--br);background:var(--bg2);color:var(--t1);font-size:13px;height:34px;box-sizing:border-box" onfocus="this.select()">'+
         '<button class="ph-btn" onclick="updateReadyQty(\''+id+'\')" style="background:var(--a);border:none;color:#fff">Set</button>'+
       '</div>'+
     '</div>';
