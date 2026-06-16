@@ -1127,7 +1127,6 @@ async function fetchLive() {
       var keys=Object.keys(items[0].fields).filter(function(k){return k!=='id'&&k!=='@odata.etag'&&k!=='ContentType';});
       console.log('[list] fields:', keys.join(', '));
       console.log('[list] sample:', JSON.stringify(items[0].fields).slice(0,800));
-      showToast('Fields ('+keys.length+'): '+keys.join(', '));
     }
     AC = items.map(function(item){return listItemToActivity(item.fields, item.id);}).filter(function(a){return a.id&&a.title;});
     ST._itemIdMap = {}; AC.forEach(function(a){if(a._listItemId)ST._itemIdMap[a.id]=a._listItemId;});
