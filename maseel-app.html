@@ -520,16 +520,17 @@ function clearOverrides(){
   try{localStorage.removeItem('maseel_ovr');}catch(e){}
 }
 function inspQty(id){var o=ST.overrides[id];if(!o||!o.ins)return 0;return o.ins.filter(function(x){return x.r==='Passed';}).reduce(function(s,x){return s+x.q;},0);}
+function totalInspQty(id){var o=ST.overrides[id];if(!o||!o.ins)return 0;return o.ins.reduce(function(s,x){return s+x.q;},0);}
 function readyQty(id){var o=ST.overrides[id];if(o&&o.readyQty!=null)return o.readyQty;return 0;}
 function remQty(id){return Math.max(0,readyQty(id)-inspQty(id));}
 function addIns(id,qty,result){
   if(!ST.overrides[id])ST.overrides[id]={};
   if(!ST.overrides[id].ins)ST.overrides[id].ins=[];
   ST.overrides[id].ins.push({q:qty,r:result,d:new Date().toISOString()});
-  var a=acOf(id),tot=a?a.totalQty||readyQty(id):0,ins=inspQty(id);
-  if(tot>0&&ins>0){
-    ST.overrides[id].pc=Math.round(ins/tot*100);
-    if(ins>=tot){ST.overrides[id].st='Done';showToast('✓ All quantity inspected — status set to Done');}
+  var a=acOf(id),tot=a?a.totalQty||readyQty(id):0,passed=inspQty(id),att=totalInspQty(id);
+  if(tot>0&&att>0){
+    ST.overrides[id].pc=Math.round(att/tot*100);
+    if(passed>=tot){ST.overrides[id].st='Done';showToast('✓ All quantity passed — status set to Done');}
     else{ST.overrides[id].st='Partially Inspected';showToast('! Partially inspected — status updated');}
   }
   saveOverrides();
@@ -1194,7 +1195,7 @@ function effPc(a){
   var o=eff(a);
   if(o&&o.ins&&o.ins.length){
     var tot=acOf(a.id)&&acOf(a.id).totalQty||readyQty(a.id);
-    if(tot>0)return Math.round(inspQty(a.id)/tot*100);
+    if(tot>0)return Math.round(totalInspQty(a.id)/tot*100);
   }
   return o.pc!=null?o.pc:a.pc;
 }
@@ -1775,10 +1776,11 @@ function updateReadyQty(id){
   if(!ST.overrides[id])ST.overrides[id]={};
   ST.overrides[id].readyQty=v;
   saveOverrides();
-  var a=acOf(id),cur=effSt(a),tot=a?a.totalQty||readyQty(id):0,ins=inspQty(id);
-  if(cur!=='For Inspection'&&tot>0&&ins>0){
-    if(ins>=tot){ST.overrides[id].st='Done';ST.overrides[id].pc=100;showToast('✓ All quantity inspected — status set to Done');}
-    else{ST.overrides[id].st='Partially Inspected';ST.overrides[id].pc=Math.round(ins/tot*100);showToast('! Partially inspected — status updated');}
+  var a=acOf(id),cur=effSt(a),tot=a?a.totalQty||readyQty(id):0,passed=inspQty(id),att=totalInspQty(id);
+  if(cur!=='For Inspection'&&tot>0&&att>0){
+    ST.overrides[id].pc=Math.round(att/tot*100);
+    if(passed>=tot){ST.overrides[id].st='Done';ST.overrides[id].pc=100;showToast('✓ All quantity passed — status set to Done');}
+    else{ST.overrides[id].st='Partially Inspected';showToast('! Partially inspected — status updated');}
     saveOverrides();
   }else{showToast('✓ Ready quantity set to '+v);}
   ST.syncQ++;updBadge();
