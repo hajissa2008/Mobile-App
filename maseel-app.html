@@ -1128,7 +1128,7 @@ async function fetchLive() {
       console.log('[list] fields:', keys.join(', '));
       console.log('[list] sample:', JSON.stringify(items[0].fields).slice(0,800));
     }
-    AC = items.map(function(item){return listItemToActivity(item.fields, item.id);}).filter(function(a){return a.id&&a.title&&a.totalQty>0;});
+    AC = items.map(function(item){return listItemToActivity(item.fields, item.id);}).filter(function(a){return a.id&&a.title;});
     ST._itemIdMap = {}; AC.forEach(function(a){if(a._listItemId)ST._itemIdMap[a.id]=a._listItemId;});
     var pmap={},order=0;
     AC.forEach(function(a){if(a.ph&&!pmap[a.ph]){pmap[a.ph]={id:a.ph,name:a.ph,order:order++,color:'#6B7280',s:null,f:null,progress:0,status:'In Progress'};}});
