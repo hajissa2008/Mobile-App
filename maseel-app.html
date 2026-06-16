@@ -764,18 +764,19 @@ async function updateListItem(token, itemId, fields){
 function listItemToActivity(fields, itemId){
   function toDateStr(v){return v?new Date(v).toISOString().split('T')[0]:null;}
   function str(v){return v!=null&&v!==undefined?String(v):'';}
+  function num(v){if(v==null)return null;var n=parseFloat(v);return isNaN(n)?null:n;}
   var a={
     id:str(fields.Title),
     title:str(fields.field_2),
     ph:'',
-    dur:fields.field_5,
+    dur:num(fields.field_5),
     bls:null,
     blf:null,
     s:toDateStr(fields.field_6),
     f:toDateStr(fields.field_7),
-    flt:fields.field_8,
+    flt:num(fields.field_8),
     responsibleList:str(fields.field_9).split(/[,;]+/).map(function(x){return x.trim().toLowerCase();}).filter(function(x){return x;}),
-    totalQty:fields.field_3,
+    totalQty:num(fields.field_3),
     unit:str(fields.field_4),
     st:str(fields.field_10)||'Not Started',
     pc:0,
