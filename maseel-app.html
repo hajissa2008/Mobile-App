@@ -1298,8 +1298,8 @@ function rToday(){
   var tf=ST.todayFilter;
   for(var i=0;i<vAC.length;i++){
     var a=vAC[i];var st=effSt(a);
-    var isActive=a.s<=DATA_DATE&&a.f>=DATA_DATE;
-    var isOverdue=a.f<DATA_DATE&&st!=='Done'&&st!=='For Inspection'&&st!=='Partially Inspected';
+    var isActive=(!a.s||a.s<=DATA_DATE)&&(!a.f||a.f>=DATA_DATE);
+    var isOverdue=a.f&&a.f<DATA_DATE&&st!=='Done'&&st!=='For Inspection'&&st!=='Partially Inspected';
     if(tf){
       if(tf==='Not Started'&&!(isActive&&st==='Not Started'))continue;
       else if(tf==='Overdue'&&!isOverdue)continue;
@@ -1335,7 +1335,7 @@ function rToday(){
   }
   /* KPI counts from all visible activities */
   var kNs=0,kOv=0,kIp=0,kFi=0,kPi=0,kDn=0;
-  for(var i=0;i<vAC.length;i++){var a=vAC[i],s=effSt(a),isActive=a.s<=DATA_DATE&&a.f>=DATA_DATE,isOverdue=a.f<DATA_DATE&&s!=='Done'&&s!=='For Inspection'&&s!=='Partially Inspected';
+  for(var i=0;i<vAC.length;i++){var a=vAC[i],s=effSt(a),isActive=(!a.s||a.s<=DATA_DATE)&&(!a.f||a.f>=DATA_DATE),isOverdue=a.f&&a.f<DATA_DATE&&s!=='Done'&&s!=='For Inspection'&&s!=='Partially Inspected';
     if(isActive&&s==='Not Started')kNs++;
     if(isOverdue)kOv++;
     if(isActive&&s==='In Progress'&&!isOverdue)kIp++;
