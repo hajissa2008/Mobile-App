@@ -774,8 +774,8 @@ function listItemToActivity(fields, itemId){
     blf:null,
     s:toDateStr(fields.field_6),
     f:toDateStr(fields.field_7),
-    flt:num(fields.field_8),
-    responsibleList:str(fields.field_9).split(/[,;]+/).map(function(x){return x.trim().toLowerCase();}).filter(function(x){return x;}),
+    flt:num(fields.field_9),
+    responsibleList:str(fields.field_8).split(/[,;]+/).map(function(x){return x.trim().toLowerCase();}).filter(function(x){return x;}),
     totalQty:num(fields.field_3),
     unit:str(fields.field_4),
     st:str(fields.field_10)||'Not Started',
@@ -1841,11 +1841,11 @@ async function syncAll(){
         var resp=o.responsibleList.join('; ');
         if(o.st==='For Inspection'){
           if(resp.toLowerCase().indexOf(INSPECT_EMAIL)<0)
-            fields.field_9=resp?resp+', '+INSPECT_EMAIL:INSPECT_EMAIL;
+            fields.field_8=resp?resp+', '+INSPECT_EMAIL:INSPECT_EMAIL;
           else
-            fields.field_9=resp;
+            fields.field_8=resp;
         } else {
-          fields.field_9=resp;
+          fields.field_8=resp;
         }
       }
       var ok=await updateListItem(token, itemId, fields);
@@ -1950,11 +1950,11 @@ async function saveToExcel(id, st, pc, notes, quiet){
   var resp=(o&&o.responsibleList?o.responsibleList.join('; '):'').trim();
   if(st==='For Inspection'){
     if(resp.toLowerCase().indexOf(INSPECT_EMAIL)<0)
-      fields.field_9=resp?resp+', '+INSPECT_EMAIL:INSPECT_EMAIL;
+      fields.field_8=resp?resp+', '+INSPECT_EMAIL:INSPECT_EMAIL;
     else
-      fields.field_9=resp;
+      fields.field_8=resp;
   } else {
-    if(resp)fields.field_9=resp;
+    if(resp)fields.field_8=resp;
   }
   var ok=await updateListItem(token, itemId, fields);
   if(ok){ST.syncQ=Math.max(0,ST.syncQ-1);updBadge();if(!quiet)showToast('✓ Synced to SharePoint');return true;}
