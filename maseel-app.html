@@ -1820,7 +1820,7 @@ async function syncAll(){
         /* Update AC in-memory so KPI reflects sync'd state without waiting for fetchLive */
         for(var ai=0;ai<AC.length;ai++){if(AC[ai].id===id){if(o.st)AC[ai].st=o.st;if(o.pc!=null)AC[ai].pc=o.pc;break;}}
         /* Clear synced fields from override so SharePoint is authoritative on next load */
-        if(ST.overrides[id]){delete ST.overrides[id].st;delete ST.overrides[id].pc;delete ST.overrides[id].notes;delete ST.overrides[id].readyQty;if(!Object.keys(ST.overrides[id]).length)delete ST.overrides[id];}
+        if(ST.overrides[id]){delete ST.overrides[id].st;delete ST.overrides[id].pc;delete ST.overrides[id].notes;if(!Object.keys(ST.overrides[id]).length)delete ST.overrides[id];}
       }else failed++;
     }
     saveOverrides();
