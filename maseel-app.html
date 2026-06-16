@@ -1606,6 +1606,7 @@ function setPh(id,phId){
   if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();
   if(ST.selId===id)openSheet(id);
 }
+function openSheet(id){
   var a=acOf(id);if(!a)return;
   var ph=phOf(effPh(a.id));var c=COL[effPh(a.id)]||'#8B9BB4';
   var st=effSt(a),pc=effPc(a);
