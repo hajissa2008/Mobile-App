@@ -1020,7 +1020,7 @@ function parseP6Buffer(buffer) {
 
   /* Build phase summaries */
   var phases=[], activities=[];
-  var phOrder=['MOB','SD','P1','P2','P3','P4','P5','ML'];
+  var phOrder=PH.length?PH.map(function(p){return p.id;}):[''];
   for (var pi=0; pi<phOrder.length; pi++) {
     var phId = phOrder[pi];
     var ph = PHASES_DEF.filter(function(p){return p.id===phId;})[0];
@@ -1132,7 +1132,7 @@ async function fetchLive() {
     var pmap={},order=0;
     AC.forEach(function(a){if(a.ph&&!pmap[a.ph]){pmap[a.ph]={id:a.ph,name:a.ph,order:order++,color:'#6B7280',s:null,f:null,progress:0,status:'In Progress'};}});
     PH = Object.keys(pmap).sort(function(a,b){return pmap[a].order-pmap[b].order;}).map(function(k){return pmap[k];});
-    if(!PH.length)PH=[{id:'ALL',name:'All Activities',order:0,color:'#6B7280',s:null,f:null,progress:0,status:'In Progress'}];
+    if(!PH.length)PH=[{id:'',name:'All Activities',order:0,color:'#6B7280',s:null,f:null,progress:0,status:'In Progress'}];
     DS.state='live';
     DS.acts=AC.length;
     DS.ts=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
@@ -1342,7 +1342,7 @@ function rToday(){
   }
   h+='</div>'+(ST.todayFilter?'<div style="padding:0 16px 8px;font-size:10px;color:var(--t3)">Filtered: '+ST.todayFilter+' · <a href="#" onclick="ST.todayFilter=\'\';rToday();return false" style="color:var(--a);text-decoration:none">Clear</a></div>':'');
 
-  var phOrder=['MOB','SD','P1','P2','P3','P4','P5','ML'];
+  var phOrder=PH.length?PH.map(function(p){return p.id;}):[''];
   var shown=false;
   for(var pi=0;pi<phOrder.length;pi++){
     var phId=phOrder[pi];if(!grp[phId])continue;
@@ -1386,7 +1386,7 @@ function rTimeline(){
   var total=vAC.length,done_t=0;
   for(var i=0;i<vAC.length;i++)if(effSt(vAC[i])==='Done')done_t++;
   var ovr=total?Math.round(100*done_t/total):0;
-  var phOrder=['MOB','SD','P1','P2','P3','P4','P5','ML'];
+  var phOrder=PH.length?PH.map(function(p){return p.id;}):[''];
 
   var h=connBanner()+permBanner()+
     '<div style="padding:16px 20px 12px;display:flex;align-items:center;justify-content:space-between">'+
@@ -1402,10 +1402,11 @@ function rTimeline(){
       '<div class="ovr-bar"><div class="ovr-fill" style="width:'+ovr+'%"></div></div>'+
       '<div class="ovr-dates"><span>Oct 2025</span><span>Jun 2027</span></div>'+
       '<div class="ph-pills">';
-  for(var pi=0;pi<phOrder.length;pi++){
-    var ph=phOf(phOrder[pi]);if(!ph)continue;
+  for(var pi=0;pi<phIds.length;pi++){
+    var ph=phOf(phIds[pi])||(phIds[pi]===''?{name:'All',color:'#8B9BB4',progress:0}:null);
+    if(!ph)continue;
     h+='<div class="ph-pill" title="'+ph.name+'"><div class="ph-pill-bg"></div>'+
-      '<div class="ph-pill-fill" style="background:'+ph.color+';width:'+ph.progress+'%"></div></div>';
+      '<div class="ph-pill-fill" style="background:'+ph.color+';width:'+(ph.progress>0?ph.progress:0)+'%"></div></div>';
   }
   h+='</div></div>';
 
@@ -1413,8 +1414,11 @@ function rTimeline(){
   var vPhIds={};
   for(var i=0;i<vAC.length;i++)vPhIds[vAC[i].ph]=1;
 
-  for(var pi=0;pi<phOrder.length;pi++){
-    var phId=phOrder[pi],ph=phOf(phId);if(!ph)continue;
+  var phIds=PH.length?PH.map(function(p){return p.id;}):Object.keys(vPhIds);
+  if(!phIds.length)phIds=[''];
+  for(var pi=0;pi<phIds.length;pi++){
+    var phId=phIds[pi],ph=phOf(phId)||(phId===''?{id:'',name:'All Activities',color:'#8B9BB4',progress:-1,s:null,f:null}:null);
+    if(!ph&&!q)continue;
     if(!vPhIds[phId]&&!q)continue;
     var acts=[];
     for(var i=0;i<vAC.length;i++){
@@ -1434,11 +1438,11 @@ function rTimeline(){
         '<div class="acc-info"><div class="acc-name">'+ph.name+'</div>'+
           '<div class="acc-sub">'+fd(ph.s)+' → '+fd(ph.f)+' · '+done+'/'+acts.length+' done</div></div>'+
         '<div class="acc-rt">'+
-          (ph.progress?'<span class="acc-pct" style="color:'+sc+'">'+ph.progress+'%</span>':'')+
+          (ph.progress>0?'<span class="acc-pct" style="color:'+sc+'">'+ph.progress+'%</span>':'')+
           '<div class="acc-chv">'+I.chv+'</div>'+
         '</div>'+
       '</div>'+
-      (ph.progress?'<div class="acc-prog"><div style="height:100%;width:'+ph.progress+'%;background:'+sc+'"></div></div>':'')+
+      (ph.progress>0?'<div class="acc-prog"><div style="height:100%;width:'+ph.progress+'%;background:'+sc+'"></div></div>':'')+
       '<div class="acc-body">';
 
     var discMap={},discOrder=[];
