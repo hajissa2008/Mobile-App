@@ -1156,6 +1156,7 @@ async function refresh() {
   DS.state='loading'; DS.msg='Refreshing…';
   rProfile();
   try{
+    if(ST.syncQ>0)await syncAll();
     await fetchLive();
     rToday(); rTimeline(); rProfile();
     showToast('✓ '+DS.acts+' activities updated');
@@ -1169,6 +1170,7 @@ async function silentRefresh() {
   if (ST.selId) return;
   var oldLen = AC.length;
   try{
+    if(ST.syncQ>0)await syncAll();
     await fetchLive();
     rToday(); rTimeline(); rProfile();
     if (AC.length !== oldLen) {
@@ -1799,22 +1801,29 @@ async function syncAll(){
       var id=ids[si],o=ST.overrides[id];
       if(!o||!ST._itemIdMap[id]){failed++;continue;}
       var itemId=ST._itemIdMap[id];
-      var fields={
-        field_10:o.st||'Not Started',
-        field_11:o.notes||'',
-        field_12:now
-      };
-      if(o.responsibleList)fields.field_9=o.responsibleList.join('; ');
-      if(o.st==='For Inspection'){
-        var resp=(o.responsibleList?o.responsibleList.join('; '):'').trim();
-        if(resp.toLowerCase().indexOf(INSPECT_EMAIL)<0)
-          fields.field_9=resp?resp+', '+INSPECT_EMAIL:INSPECT_EMAIL;
-        else
+      var fields={field_12:now};
+      if(o.st){fields.field_10=o.st;}
+      if(o.notes){fields.field_11=o.notes;}
+      if(o.responsibleList){
+        var resp=o.responsibleList.join('; ');
+        if(o.st==='For Inspection'){
+          if(resp.toLowerCase().indexOf(INSPECT_EMAIL)<0)
+            fields.field_9=resp?resp+', '+INSPECT_EMAIL:INSPECT_EMAIL;
+          else
+            fields.field_9=resp;
+        } else {
           fields.field_9=resp;
+        }
       }
       var ok=await updateListItem(token, itemId, fields);
-      if(ok)synced++; else failed++;
+      if(ok){synced++;
+        /* Update AC in-memory so KPI reflects sync'd state without waiting for fetchLive */
+        for(var ai=0;ai<AC.length;ai++){if(AC[ai].id===id){if(o.st)AC[ai].st=o.st;if(o.pc!=null)AC[ai].pc=o.pc;break;}}
+        /* Clear synced fields from override so SharePoint is authoritative on next load */
+        if(ST.overrides[id]){delete ST.overrides[id].st;delete ST.overrides[id].pc;delete ST.overrides[id].notes;delete ST.overrides[id].readyQty;if(!Object.keys(ST.overrides[id]).length)delete ST.overrides[id];}
+      }else failed++;
     }
+    saveOverrides();
     if(synced>0){
       ST.syncQ=0;updBadge();
       showToast('✓ Synced '+synced+' activit'+(synced>1?'ies':'y')+(failed?' ('+failed+' failed)':''));
@@ -1902,11 +1911,9 @@ async function saveToExcel(id, st, pc, notes, quiet){
   var token=await getGraphToken();
   if(!token)return false;
   var o=ST.overrides[id];
-  var fields={
-    field_10:st,
-    field_11:notes||'',
-    field_12:new Date().toISOString()
-  };
+  var fields={field_12:new Date().toISOString()};
+  if(st)fields.field_10=st;
+  if(notes)fields.field_11=notes;
   var resp=(o&&o.responsibleList?o.responsibleList.join('; '):'').trim();
   if(st==='For Inspection'){
     if(resp.toLowerCase().indexOf(INSPECT_EMAIL)<0)
