@@ -833,7 +833,7 @@ function initMsal(){
     AUTH._doneRedirect = false;
     AUTH.instance.handleRedirectPromise().then(function(resp){
       if(!resp||!resp.account){rr();return;}
-      AUTH.user=resp.account;AUTH._profile=resp.account.name||resp.account.username||'';try{localStorage.setItem('msal_profile',AUTH._profile);}catch(e){}
+      AUTH.user=resp.account;AUTH._profile=resp.account.name||resp.account.username||'';try{localStorage.setItem('msal_profile',AUTH._profile);}catch(e){}try{localStorage.setItem('msal_user',resp.account.username);}catch(e){}
       AUTH._doneRedirect = true;
       fetchLive().then(function(){
         try{rToday();}catch(e){}try{rTimeline();}catch(e){}try{rProfile();}catch(e){}
@@ -849,8 +849,12 @@ function initMsal(){
       });
     }).catch(function(){rr();});
   });
+  var savedUser=function(){try{return localStorage.getItem('msal_user');}catch(e){return null;}}();
   var accounts=AUTH.instance.getAllAccounts();
-  if(accounts&&accounts.length>0){AUTH.user=accounts[0];}
+  if(accounts&&accounts.length>0){
+    if(savedUser){for(var i=0;i<accounts.length;i++){if(accounts[i].username===savedUser){AUTH.user=accounts[i];break;}}}
+    if(!AUTH.user)AUTH.user=accounts[0];
+  }
 }
 
 function showLoginScreen(){
@@ -877,7 +881,7 @@ function loginMsal(){
     if(!resp||!resp.account)return;
     AUTH.user=resp.account;
     AUTH._profile=resp.account.name||resp.account.username||'';
-    try{localStorage.setItem('msal_profile',AUTH._profile);}catch(e){}
+    try{localStorage.setItem('msal_profile',AUTH._profile);}catch(e){}try{localStorage.setItem('msal_user',resp.account.username);}catch(e){}
     fetchLive().then(function(){
       try{rToday();}catch(e){}try{rTimeline();}catch(e){}try{rProfile();}catch(e){}
       hideLoginScreen();
