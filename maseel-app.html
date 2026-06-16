@@ -1583,6 +1583,7 @@ function _sr(ic,ib,ibc,t,s,r){
 /* ══════════════════════════════════════════
    SHEET
 ══════════════════════════════════════════ */
+function row(l,v){return v?'<tr><td style="color:var(--t3);padding:3px 8px 3px 0;white-space:nowrap">'+l+'</td><td style="color:var(--t1)">'+escH(String(v))+'</td></tr>':'';}
 function openSheet(id){
   var a=acOf(id);if(!a)return;
   var ph=phOf(a.ph);var c=COL[a.ph]||'#8B9BB4';
@@ -1618,6 +1619,10 @@ function openSheet(id){
       '<input type="range" min="0" max="100" step="5" value="'+pc+'" oninput="updPc(this.value)">'+
       '<div class="ptrack"><div class="pfill-sh" id="ptf" style="width:'+pc+'%;background:'+c+'"></div></div>'+
     '</div>'+
+    '<div class="sh-sec"><div class="sh-sl">Details</div><table style="width:100%;font-size:11px;border-collapse:collapse">'+
+      row('QTY',a.totalQty)+row('Unit',a.unit)+row('Duration',a.dur+'d')+
+      row('Total Float',a.flt!=null?a.flt+'d':'')+row('Discipline',a.disc)+
+      '</table></div>'+
     '<div class="sh-sec"><div class="sh-sl">Inspection Notes</div>'+
       '<textarea id="shno" placeholder="Add site notes…">'+escH(a.notes||(ST.overrides[a.id]?ST.overrides[a.id].notes:'')||'')+'</textarea></div>'+
     '<div id="insp-container">'+inspSection(id)+'</div>'+
