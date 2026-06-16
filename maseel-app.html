@@ -870,7 +870,30 @@ function loginMsal(){
   if(!AUTH.instance)return;
   var btn=document.getElementById('ls-btn');
   if(btn){btn.disabled=true;btn.innerHTML='Signing in…';}
-  AUTH.instance.loginRedirect({scopes:['User.Read','openid','profile',GRAPH_SCOPE]});
+  AUTH.instance.loginPopup({
+    scopes:['User.Read','openid','profile',GRAPH_SCOPE],
+    prompt:'login'
+  }).then(function(resp){
+    if(!resp||!resp.account)return;
+    AUTH.user=resp.account;
+    AUTH._profile=resp.account.name||resp.account.username||'';
+    try{localStorage.setItem('msal_profile',AUTH._profile);}catch(e){}
+    fetchLive().then(function(){
+      try{rToday();}catch(e){}try{rTimeline();}catch(e){}try{rProfile();}catch(e){}
+      hideLoginScreen();
+      var pending=sessionStorage.getItem('maseel_pending');
+      if(pending){sessionStorage.removeItem('maseel_pending');
+        if(pending==='token'){showToast('✓ Graph permission granted');try{rProfile();}catch(e){}setTimeout(syncAll,500);}
+      }
+    }).catch(function(err){
+      showToast('Failed to load schedule: '+err.message);
+    });
+    if(btn){btn.disabled=false;btn.innerHTML='Sign In';}
+  }).catch(function(err){
+    if(btn){btn.disabled=false;btn.innerHTML='Sign In';}
+    if(err.message&&err.message.indexOf('Popup closed')>=0)return;
+    showToast('Login cancelled or failed');
+  });
 }
 
 function logoutMsal(){
