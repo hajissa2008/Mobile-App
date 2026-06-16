@@ -764,8 +764,8 @@ function listItemToActivity(fields, itemId){
   function toDateStr(v){return v?new Date(v).toISOString().split('T')[0]:null;}
   function str(v){return v!=null&&v!==undefined?String(v):'';}
   var a={
-    id:str(fields.field_2),
-    title:str(fields.Title),
+    id:str(fields.Title),
+    title:str(fields.field_2),
     ph:'',
     dur:fields.field_5,
     bls:null,
