@@ -1272,14 +1272,16 @@ function visibleAC(){
   console.log('[perm] role:', role, 'AC length:', AC.length, 'sample responsibleList:', AC[0]?AC[0].responsibleList:null);
   if(role==='admin'||role==='inspector'||role==='viewer')return AC;
   var e=userEmail(),eLocal=e.split('@')[0];
+  var emptyResp=0,matched=0,matchedLocal=0,samples=[];
   var r=AC.filter(function(a){
-    if(!a.responsibleList||!a.responsibleList.length)return true;
-    if(a.responsibleList.indexOf(e)>=0)return true;
-    if(eLocal&&a.responsibleList.indexOf(eLocal)>=0)return true;
+    if(!a.responsibleList||!a.responsibleList.length){emptyResp++;return true;}
+    if(a.responsibleList.indexOf(e)>=0){matched++;return true;}
+    if(eLocal&&a.responsibleList.indexOf(eLocal)>=0){matchedLocal++;return true;}
+    if(samples.length<3)samples.push({id:a.id,title:a.title,resp:a.responsibleList});
     if(role==='inspector'&&effSt(a)==='For Inspection')return true;
     return false;
   });
-  console.log('[perm] filtered:', r.length, 'of', AC.length);
+  console.log('[perm] filtered:', r.length, 'of', AC.length, 'emptyResp:', emptyResp, 'matched:', matched, 'matchedLocal:', matchedLocal, 'samples:', samples);
   return r;
 }
 function visiblePH(){
