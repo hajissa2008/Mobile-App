@@ -1817,10 +1817,14 @@ async function syncAll(){
     }
     if(synced>0){
       ST.syncQ=0;updBadge();
-      showToast('✓ Synced '+synced+' activity'+(synced>1?'ies':'y')+(failed?' ('+failed+' failed)':''));
+      showToast('✓ Synced '+synced+' activit'+(synced>1?'ies':'y')+(failed?' ('+failed+' failed)':''));
     } else {
       showToast('No changes to sync');
     }
+    /* Clean up stale overrides for IDs no longer in the list */
+    var allIds={};AC.forEach(function(a){allIds[a.id]=1;});
+    Object.keys(ST.overrides).forEach(function(k){if(!allIds[k]){delete ST.overrides[k];}});
+    saveOverrides();
   }catch(e){console.error('[sync] batch error:', e);showToast('Sync error: '+e.message);}
   finally{ST.syncing=false;try{if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();else rProfile();}catch(e){}}
 }
