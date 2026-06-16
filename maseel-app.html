@@ -1133,7 +1133,12 @@ async function fetchLive() {
     var pmap={},order=0;
     AC.forEach(function(a){if(a.ph&&!pmap[a.ph]){pmap[a.ph]={id:a.ph,name:a.ph,order:order++,color:'#6B7280',s:null,f:null,progress:0,status:'In Progress'};}});
     PH = Object.keys(pmap).sort(function(a,b){return pmap[a].order-pmap[b].order;}).map(function(k){return pmap[k];});
-    if(!PH.length)PH=[{id:'',name:'All Activities',order:0,color:'#6B7280',s:null,f:null,progress:0,status:'In Progress'}];
+    if(!PH.length)PH=[{id:'Unassigned',name:'Unassigned',order:0,color:'#6B7280',s:null,f:null,progress:0,status:'Not Started'},
+      {id:'Phase 1',name:'Phase 1',order:1,color:'#F59E0B',s:null,f:null,progress:0,status:'Not Started'},
+      {id:'Phase 2',name:'Phase 2',order:2,color:'#3B82F6',s:null,f:null,progress:0,status:'Not Started'},
+      {id:'Phase 3',name:'Phase 3',order:3,color:'#10B981',s:null,f:null,progress:0,status:'Not Started'},
+      {id:'Phase 4',name:'Phase 4',order:4,color:'#EF4444',s:null,f:null,progress:0,status:'Not Started'},
+      {id:'Phase 5',name:'Phase 5',order:5,color:'#8B5CF6',s:null,f:null,progress:0,status:'Not Started'}];
     DS.state='live';
     DS.acts=AC.length;
     DS.ts=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
@@ -1246,7 +1251,7 @@ function visibleAC(){
   return r;
 }
 function visiblePH(){
-  var ids={};visibleAC().forEach(function(a){ids[a.ph]=1;});
+  var ids={};visibleAC().forEach(function(a){ids[effPh(a.id)]=1;});
   return PH.filter(function(p){return ids[p.id];});
 }
 function permBanner(){
@@ -1306,7 +1311,7 @@ function rToday(){
       active.push(a);
   }
   var grp={};
-  for(var i=0;i<active.length;i++){var a=active[i];if(!grp[a.ph])grp[a.ph]=[];grp[a.ph].push(a);}
+  for(var i=0;i<active.length;i++){var a=active[i],p=effPh(a.id);if(!grp[p])grp[p]=[];grp[p].push(a);}
 
   var h=connBanner()+permBanner()+
     '<div class="ph-hdr">'+
@@ -1370,7 +1375,7 @@ function rToday(){
 }
 
 function buildCard(a){
-  var st=effSt(a),pc=effPc(a),k=sk(st),c=COL[a.ph]||'#8B9BB4';
+  var st=effSt(a),pc=effPc(a),k=sk(st),c=COL[effPh(a.id)]||'#8B9BB4';
   return'<div class="card'+(st==='Done'?' fade-c':'')+'" onclick="openSheet(\''+a.id+'\')" style="border-left:none">'+
     '<div class="stripe" style="background:'+c+'"></div>'+
     '<div class="crow">'+
@@ -1420,17 +1425,16 @@ function rTimeline(){
 
   /* Build visible phases set */
   var vPhIds={};
-  for(var i=0;i<vAC.length;i++)vPhIds[vAC[i].ph]=1;
-
-  var phIds=PH.length?PH.map(function(p){return p.id;}):Object.keys(vPhIds);
-  if(!phIds.length)phIds=[''];
+  for(var i=0;i<vAC.length;i++)vPhIds[effPh(vAC[i].id)]=1;
+  if(!phIds.length)phIds=['Unassigned'];
+  if(phIds.indexOf('Unassigned')<0&&vPhIds['Unassigned'])phIds.unshift('Unassigned');
   for(var pi=0;pi<phIds.length;pi++){
-    var phId=phIds[pi],ph=phOf(phId)||(phId===''?{id:'',name:'All Activities',color:'#8B9BB4',progress:-1,s:null,f:null}:null);
+    var phId=phIds[pi],ph=phOf(phId)||(phId==='Unassigned'?{id:'Unassigned',name:'Unassigned',color:'#6B7280',progress:0,s:null,f:null}:null);
     if(!ph&&!q)continue;
     if(!vPhIds[phId]&&!q)continue;
     var acts=[];
     for(var i=0;i<vAC.length;i++){
-      var a=vAC[i];if(a.ph!==phId)continue;
+      var a=vAC[i];if(effPh(a.id)!==phId)continue;
       if(q&&a.title.toLowerCase().indexOf(q)===-1&&a.id.toLowerCase().indexOf(q)===-1&&(a.disc||'').toLowerCase().indexOf(q)===-1)continue;
       acts.push(a);
     }
@@ -1584,9 +1588,26 @@ function _sr(ic,ib,ibc,t,s,r){
    SHEET
 ══════════════════════════════════════════ */
 function row(l,v){return v?'<tr><td style="color:var(--t3);padding:3px 8px 3px 0;white-space:nowrap">'+l+'</td><td style="color:var(--t1)">'+escH(String(v))+'</td></tr>':'';}
-function openSheet(id){
+function effPh(id){var o=ST.overrides[id];return o&&o.ph?o.ph:(acOf(id)&&acOf(id).ph?acOf(id).ph:'Unassigned');}
+function cyclePh(id){
+  var phs=['Unassigned','Phase 1','Phase 2','Phase 3','Phase 4','Phase 5'];
+  var cur=effPh(id),idx=phs.indexOf(cur);
+  var nxt=idx<phs.length-1?phs[idx+1]:phs[0];
+  if(!ST.overrides[id])ST.overrides[id]={};
+  ST.overrides[id].ph=nxt;
+  saveOverrides();
+  if(ST.selId===id)openSheet(id);
+  showToast('Phase: '+nxt);
+}
+function setPh(id,phId){
+  if(!ST.overrides[id])ST.overrides[id]={};
+  ST.overrides[id].ph=phId;
+  saveOverrides();
+  if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();
+  if(ST.selId===id)openSheet(id);
+}
   var a=acOf(id);if(!a)return;
-  var ph=phOf(a.ph);var c=COL[a.ph]||'#8B9BB4';
+  var ph=phOf(effPh(a.id));var c=COL[effPh(a.id)]||'#8B9BB4';
   var st=effSt(a),pc=effPc(a);
   ST.shSt=st;ST.shPc=pc;ST.calAdded=false;
   var opts=[{k:'Not Started',cls:'s-ns',col:'#9CA3AF'},{k:'In Progress',cls:'s-ip',col:'#60A5FA'},
@@ -1620,7 +1641,7 @@ function openSheet(id){
       '<div class="ptrack"><div class="pfill-sh" id="ptf" style="width:'+pc+'%;background:'+c+'"></div></div>'+
     '</div>'+
     '<div class="sh-sec"><div class="sh-sl">Details</div><table style="width:100%;font-size:11px;border-collapse:collapse">'+
-      row('QTY',a.totalQty)+row('Unit',a.unit)+row('Duration',a.dur+'d')+
+      row('Activity Name',a.title)+'<tr><td style="color:var(--t3);padding:3px 8px 3px 0;white-space:nowrap">Phase</td><td style="color:var(--t1);cursor:pointer" onclick="cyclePh(\''+a.id+'\')">'+effPh(a.id)+' <span style="color:var(--t3);font-size:10px">↻</span></td></tr>'+row('QTY',a.totalQty)+row('Unit',a.unit)+row('Duration',a.dur+'d')+
       row('Total Float',a.flt!=null?a.flt+'d':'')+row('Discipline',a.disc)+
       '</table></div>'+
     '<div class="sh-sec"><div class="sh-sl">Inspection Notes</div>'+
