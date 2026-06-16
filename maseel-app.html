@@ -1267,10 +1267,11 @@ function visibleAC(){
   var role=userRole();
   console.log('[perm] role:', role, 'AC length:', AC.length, 'sample responsibleList:', AC[0]?AC[0].responsibleList:null);
   if(role==='admin'||role==='inspector'||role==='viewer')return AC;
-  var e=userEmail();
+  var e=userEmail(),eLocal=e.split('@')[0];
   var r=AC.filter(function(a){
     if(!a.responsibleList||!a.responsibleList.length)return true;
     if(a.responsibleList.indexOf(e)>=0)return true;
+    if(eLocal&&a.responsibleList.indexOf(eLocal)>=0)return true;
     if(role==='inspector'&&effSt(a)==='For Inspection')return true;
     return false;
   });
