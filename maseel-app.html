@@ -526,13 +526,13 @@ function addIns(id,qty,result){
   if(!ST.overrides[id])ST.overrides[id]={};
   if(!ST.overrides[id].ins)ST.overrides[id].ins=[];
   ST.overrides[id].ins.push({q:qty,r:result,d:new Date().toISOString()});
-  saveOverrides();
   var a=acOf(id),tot=a?a.totalQty||readyQty(id):0,ins=inspQty(id);
   if(tot>0&&ins>0){
+    ST.overrides[id].pc=Math.round(ins/tot*100);
     if(ins>=tot){ST.overrides[id].st='Done';showToast('✓ All quantity inspected — status set to Done');}
     else{ST.overrides[id].st='Partially Inspected';showToast('! Partially inspected — status updated');}
-    saveOverrides();
   }
+  saveOverrides();
   ST.syncQ++;updBadge();
   syncAll();
 }
