@@ -1217,6 +1217,7 @@ var MO=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 function fd(d){if(!d)return'—';var p=d.split('-');return MO[+p[1]-1]+' '+(+p[2]);}
 function phOf(id){for(var i=0;i<PH.length;i++)if(PH[i].id===id)return PH[i];return null;}
 function detectPhaseFromId(id){var m=id.match(/P([1-5])(?:\(\d+\))?/i);return m?'Phase '+m[1]:'Unassigned';}
+function calcDur(a){if(!a.s||!a.f)return 0;return Math.max(0,Math.round((new Date(a.f)-new Date(a.s))/(86400000)));}
 function acOf(id){for(var i=0;i<AC.length;i++)if(AC[i].id===id)return AC[i];return null;}
 function sk(s){return s==='Not Started'?'ns':s==='In Progress'?'ip':s==='Done'?'dn':s==='Partially Inspected'?'pi':'fi';}
 function eff(a){return(ST.overrides[a.id]||{});}
@@ -1613,7 +1614,7 @@ function setPh(id,phId){
 }
 function openSheet(id){
   var a=acOf(id);if(!a)return;
-  var ph=phOf(effPh(a.id));var c=COL[effPh(a.id)]||'#8B9BB4';
+  var dp=detectPhaseFromId(a.id);var c=COL[dp]||'#8B9BB4';
   var st=effSt(a),pc=effPc(a);
   ST.shSt=st;ST.shPc=pc;ST.calAdded=false;
   var opts=[{k:'Not Started',cls:'s-ns',col:'#9CA3AF'},{k:'In Progress',cls:'s-ip',col:'#60A5FA'},
@@ -1621,14 +1622,14 @@ function openSheet(id){
   var h='<div class="sh-handle"></div>'+
     '<div class="sh-hd">'+
       '<div style="display:flex;align-items:center;justify-content:space-between">'+
-        '<span class="sh-tag">'+(ph?ph.name:'Activity')+'</span>'+
+        '<span class="sh-tag">'+(dp||'Activity')+'</span>'+
         '<button style="background:none;border:none;cursor:pointer;color:var(--t3);padding:6px;display:flex;-webkit-appearance:none" onclick="closeSheet()">'+I.x+'</button>'+
       '</div>'+
       '<div class="sh-title">'+escH(a.title)+'</div>'+
       '<div style="font-size:10px;color:var(--t3);margin-top:3px;font-family:monospace;letter-spacing:.5px">'+a.id+(a.disc?' · '+escH(a.disc):'')+'</div>'+
       '<div class="sh-meta">'+
         '<span class="mchip">'+I.cal+' '+fd(a.s)+' → '+fd(a.f)+'</span>'+
-        '<span class="mchip">'+I.zap+' '+a.dur+'d</span>'+
+        '<span class="mchip">'+I.zap+' '+calcDur(a)+'d</span>'+
         (a.float!=null?'<span class="mchip" style="color:'+(a.float<0?'#F87171':a.float<5?'var(--a)':'var(--gr)')+'">'+(a.float<0?'Overdue':'Float: '+a.float+'d')+'</span>':'')+
       '</div>'+
     '</div>'+
@@ -1647,7 +1648,7 @@ function openSheet(id){
       '<div class="ptrack"><div class="pfill-sh" id="ptf" style="width:'+pc+'%;background:'+c+'"></div></div>'+
     '</div>'+
     '<div class="sh-sec"><div class="sh-sl">Details</div><table style="width:100%;font-size:11px;border-collapse:collapse">'+
-      row('Activity Name',a.title)+'<tr><td style="color:var(--t3);padding:3px 8px 3px 0;white-space:nowrap">Phase</td><td style="color:var(--t1);cursor:pointer" onclick="cyclePh(\''+a.id+'\')">'+effPh(a.id)+' <span style="color:var(--t3);font-size:10px">↻</span></td></tr>'+row('QTY',a.totalQty)+row('Unit',a.unit)+row('Duration',a.dur+'d')+
+      row('Activity Name',a.title)+row('Phase',dp)+row('QTY',a.totalQty)+row('Unit',a.unit)+row('Duration',calcDur(a)+'d')+
       row('Total Float',a.flt!=null?a.flt+'d':'')+row('Discipline',a.disc)+
       '</table></div>'+
     '<div class="sh-sec"><div class="sh-sl">Inspection Notes</div>'+
