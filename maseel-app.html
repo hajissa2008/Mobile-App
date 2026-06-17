@@ -779,7 +779,7 @@ function listItemToActivity(fields, itemId){
     responsibleList:(function(){var r=fields.Responsible||fields.field_8||fields.field_9||'';return str(r).split(/[,;]+/).map(function(x){return x.trim().toLowerCase();}).filter(function(x){return x;});})(),
     totalQty:num(fields.field_3),
     unit:str(fields.field_4),
-    st:str(fields.field_10)||'Not Started',
+    st:str(fields.field_10).trim()||'Not Started',
     pc:0,
     disc:str(fields.field_11),
     _listItemId:itemId
@@ -1375,6 +1375,8 @@ function rToday(){
     if(s==='For Inspection')kFi++;
     if(s==='Partially Inspected')kPi++;
     if(s==='Done')kDn++;}
+  var stCounts={};for(var si=0;si<vAC.length;si++){var sv=effSt(vAC[si]);stCounts[sv]=(stCounts[sv]||0)+1;}
+  console.log('[kpi] vAC:',vAC.length,'stCounts:',JSON.stringify(stCounts),'kNs:',kNs,'kIp:',kIp,'kFi:',kFi,'kPi:',kPi,'kDn:',kDn,'kOv:',kOv,'sample effSt:',vAC[0]?effSt(vAC[0]):'none','sample st:',vAC[0]?vAC[0].st:'none');
   var kpis=[
     {k:'Not Started',c:'#9CA3AF',v:kNs},
     {k:'Overdue',c:'#EF4444',v:kOv},
