@@ -247,27 +247,23 @@ async function fetchSharePointData() {
 
   if (STATE.proxyMode) {
     const resp = await fetch(PROXY_URL + '/api/data');
-    if (resp.status === 401) {
-      const loginResp = await fetch(PROXY_URL + '/api/auth/login');
-      const flow = await loginResp.json();
-      if (flow.error) throw new Error(flow.error);
-      STATE.deviceCode = flow.device_code;
-      showDeviceCodeLogin(flow);
-      throw new Error('Please complete the login in your browser, then click Refresh.');
+    if (resp.status === 401 || resp.status === 403) {
+      const body = await resp.json().catch(() => ({}));
+      if (body.error === 'not_authenticated') {
+        const loginResp = await fetch(PROXY_URL + '/api/auth/login');
+        const flow = await loginResp.json();
+        if (flow.error) throw new Error(flow.error);
+        STATE.deviceCode = flow.device_code;
+        showDeviceCodeLogin(flow);
+        throw new Error('Please complete the login in your browser, then click Refresh.');
+      }
+      throw new Error(body.error || `Server returned ${resp.status}`);
     }
     if (!resp.ok) {
       const text = await resp.text();
       throw new Error(`Proxy error: HTTP ${resp.status} - ${text.slice(0, 200)}`);
     }
     const data = await resp.json();
-    if (data.error === 'not_authenticated') {
-      const loginResp = await fetch(PROXY_URL + '/api/auth/login');
-      const flow = await loginResp.json();
-      if (flow.error) throw new Error(flow.error);
-      STATE.deviceCode = flow.device_code;
-      showDeviceCodeLogin(flow);
-      throw new Error('Please complete the login in your browser, then click Refresh.');
-    }
     const results = data.items || [];
     return results.map(item => ({
       id: item.Id,
