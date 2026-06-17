@@ -1215,6 +1215,7 @@ async function silentRefresh() {
 var MO=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function fd(d){if(!d)return'—';var p=d.split('-');return MO[+p[1]-1]+' '+(+p[2]);}
 function phOf(id){for(var i=0;i<PH.length;i++)if(PH[i].id===id)return PH[i];return null;}
+function detectPhaseFromId(id){var m=id.match(/P([1-5])(?:\(\d+\))?/i);return m?'Phase '+m[1]:'Unassigned';}
 function acOf(id){for(var i=0;i<AC.length;i++)if(AC[i].id===id)return AC[i];return null;}
 function sk(s){return s==='Not Started'?'ns':s==='In Progress'?'ip':s==='Done'?'dn':s==='Partially Inspected'?'pi':'fi';}
 function eff(a){return(ST.overrides[a.id]||{});}
@@ -1345,7 +1346,7 @@ function rToday(){
       active.push(a);
   }
   var grp={};
-  for(var i=0;i<active.length;i++){var a=active[i],p=effPh(a.id);if(!grp[p])grp[p]=[];grp[p].push(a);}
+  for(var i=0;i<active.length;i++){var a=active[i],p=detectPhaseFromId(a.id);if(!grp[p])grp[p]=[];grp[p].push(a);}
 
   var h=connBanner()+permBanner()+
     '<div class="ph-hdr">'+
