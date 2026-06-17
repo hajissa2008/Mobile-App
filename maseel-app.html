@@ -768,7 +768,7 @@ function listItemToActivity(fields, itemId){
   function num(v){if(v==null)return null;var n=parseFloat(v);return isNaN(n)?null:n;}
   var a={
     id:str(fields.Title),
-    title:str(fields.field_2),
+    title:str(fields.field_1||fields.field_2),
     ph:'',
     dur:num(fields.field_9),
     bls:null,
@@ -777,8 +777,8 @@ function listItemToActivity(fields, itemId){
     f:toDateStr(fields.field_6),
     flt:num(fields.field_7),
     responsibleList:(function(){var r=fields.Responsible||fields.field_8||fields.field_9||'';return str(r).split(/[,;]+/).map(function(x){return x.trim().toLowerCase();}).filter(function(x){return x;});})(),
-    totalQty:num(fields.field_3),
-    unit:str(fields.field_4),
+    totalQty:num(fields.field_4||fields.field_3),
+    unit:str(fields.field_3||fields.field_4),
     st:str(fields.field_10).trim()||'Not Started',
     pc:0,
     disc:str(fields.field_11),
@@ -1334,9 +1334,9 @@ function rToday(){
     var isActive=(!a.s||a.s<=DATA_DATE)&&(!a.f||a.f>=DATA_DATE);
     var isOverdue=a.f&&a.f<DATA_DATE&&st!=='Done'&&st!=='For Inspection'&&st!=='Partially Inspected';
     if(tf){
-      if(tf==='Not Started'&&!(isActive&&st==='Not Started'))continue;
+      if(tf==='Not Started'&&st!=='Not Started')continue;
       else if(tf==='Overdue'&&!isOverdue)continue;
-      else if(tf==='In Progress'&&!(isActive&&st==='In Progress'&&!isOverdue))continue;
+      else if(tf==='In Progress'&&!(st==='In Progress'&&!isOverdue))continue;
       else if(tf==='For Inspection'&&st!=='For Inspection')continue;
       else if(tf==='Partially Inspected'&&st!=='Partially Inspected')continue;
       else if(tf==='Done'&&st!=='Done')continue;
@@ -1366,17 +1366,15 @@ function rToday(){
       '<div class="n-body"><b>P6 Update — 3 Jun 2026</b><s>'+active.length+' activity'+(active.length!==1?'ies':'')+' · Project float: −49 days</s></div>'+
       '<button class="n-x" onclick="event.stopPropagation();dimB()">'+I.x+'</button></div>';
   }
-  /* KPI counts from all visible activities */
+  /* KPI counts from all visible activities (by status, regardless of date range) */
   var kNs=0,kOv=0,kIp=0,kFi=0,kPi=0,kDn=0;
-  for(var i=0;i<vAC.length;i++){var a=vAC[i],s=effSt(a),isActive=(!a.s||a.s<=DATA_DATE)&&(!a.f||a.f>=DATA_DATE),isOverdue=a.f&&a.f<DATA_DATE&&s!=='Done'&&s!=='For Inspection'&&s!=='Partially Inspected';
-    if(isActive&&s==='Not Started')kNs++;
+  for(var i=0;i<vAC.length;i++){var a=vAC[i],s=effSt(a),isOverdue=a.f&&a.f<DATA_DATE&&s!=='Done'&&s!=='For Inspection'&&s!=='Partially Inspected';
+    if(s==='Not Started')kNs++;
     if(isOverdue)kOv++;
-    if(isActive&&s==='In Progress'&&!isOverdue)kIp++;
+    if(s==='In Progress'&&!isOverdue)kIp++;
     if(s==='For Inspection')kFi++;
     if(s==='Partially Inspected')kPi++;
     if(s==='Done')kDn++;}
-  var stCounts={};for(var si=0;si<vAC.length;si++){var sv=effSt(vAC[si]);stCounts[sv]=(stCounts[sv]||0)+1;}
-  console.log('[kpi] vAC:',vAC.length,'stCounts:',JSON.stringify(stCounts),'kNs:',kNs,'kIp:',kIp,'kFi:',kFi,'kPi:',kPi,'kDn:',kDn,'kOv:',kOv,'sample effSt:',vAC[0]?effSt(vAC[0]):'none','sample st:',vAC[0]?vAC[0].st:'none');
   var kpis=[
     {k:'Not Started',c:'#9CA3AF',v:kNs},
     {k:'Overdue',c:'#EF4444',v:kOv},
