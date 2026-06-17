@@ -59,6 +59,7 @@
   .config-field { display: flex; flex-direction: column; gap: 4px; }
   .config-field label { font-size: 12px; color: #888; font-weight: 500; }
   .config-field input, .config-field select { padding: 7px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; min-width: 180px; }
+  .config-field .hint { font-size: 11px; color: #aaa; margin-top: 2px; }
   @media (max-width: 900px) { .charts-row { grid-template-columns: 1fr; } .summary-row { grid-template-columns: repeat(2, 1fr); } }
 </style>
 </head>
@@ -75,38 +76,38 @@
 <div class="error-banner" id="errorBanner"></div>
 
 <div class="config-panel" id="configPanel" style="display:none">
-  <h3>SharePoint Configuration</h3>
+  <h3>GitHub Configuration</h3>
   <div class="config-row">
     <div class="config-field">
-      <label>Site URL</label>
-      <input id="cfgSiteUrl" value="/sites/YourSite" placeholder="/sites/YourSite">
+      <label>Personal Access Token</label>
+      <input id="cfgToken" type="password" placeholder="ghp_...">
+      <div class="hint">Requires repo scope</div>
     </div>
     <div class="config-field">
-      <label>List Name</label>
-      <input id="cfgListName" value="Activities" placeholder="Activities">
+      <label>Repo Owner</label>
+      <input id="cfgOwner" placeholder="org-name or username">
     </div>
     <div class="config-field">
-      <label>Title Field</label>
-      <input id="cfgTitleField" value="Title" placeholder="Title">
+      <label>Repo Name</label>
+      <input id="cfgRepo" placeholder="repo-name">
     </div>
     <div class="config-field">
-      <label>Responsible Field</label>
-      <input id="cfgRespField" value="Responsible" placeholder="Responsible">
+      <label>In Progress Labels</label>
+      <input id="cfgInProg" value="in progress,wip,ongoing" placeholder="comma-separated">
+      <div class="hint">Labels that mean "in progress"</div>
     </div>
     <div class="config-field">
-      <label>Status Field</label>
-      <input id="cfgStatusField" value="Status" placeholder="Status">
+      <label>Completed Labels</label>
+      <input id="cfgCompleted" value="completed,done,finished" placeholder="comma-separated">
+      <div class="hint">Labels that mean "completed" (closed issues also count)</div>
     </div>
     <div class="config-field">
-      <label>Completed Value</label>
-      <input id="cfgCompletedVal" value="Completed" placeholder="Completed">
-    </div>
-    <div class="config-field">
-      <label>In Progress Value</label>
-      <input id="cfgInProgVal" value="In Progress" placeholder="In Progress">
+      <label>Blocked Labels</label>
+      <input id="cfgBlocked" value="blocked,waiting" placeholder="comma-separated">
+      <div class="hint">Labels that mean "blocked"</div>
     </div>
     <div style="display:flex;gap:8px;align-items:flex-end">
-      <button onclick="saveConfig()">Apply</button>
+      <button onclick="saveConfig()">Apply &amp; Connect</button>
       <button class="secondary" onclick="hideConfig()">Close</button>
     </div>
   </div>
@@ -133,7 +134,7 @@
   </div>
   <div id="loadingIndicator" class="loading">
     <div class="spinner"></div>
-    Loading data from SharePoint...
+    <p id="loadingText">Loading data from GitHub...</p>
   </div>
   <div id="tableWrapper" style="display:none">
     <table>
@@ -141,7 +142,7 @@
         <th onclick="sortBy('title')">Activity</th>
         <th onclick="sortBy('responsible')">Responsible</th>
         <th onclick="sortBy('status')">Status</th>
-        <th onclick="sortBy('completed')">Completed</th>
+        <th onclick="sortBy('completed')">Done</th>
       </tr></thead>
       <tbody id="tableBody"></tbody>
     </table>
@@ -162,52 +163,45 @@ const STATE = {
   pageSize: 20,
   kpiChart: null,
   statusChart: null,
-  proxyMode: false,
-  deviceCode: null,
 };
 
-const PROXY_URL = 'http://localhost:5000';
-
 const DEFAULTS = {
-  siteUrl: '/sites/Alenshaiah',
-  listName: 'Maseel Activity',
-  titleField: 'Title',
-  respField: 'Responsible',
-  statusField: 'Status',
-  completedVal: 'Completed',
-  inProgVal: 'In Progress',
+  token: '',
+  owner: '',
+  repo: '',
+  inProgLabels: 'in progress,wip,ongoing',
+  completedLabels: 'completed,done,finished',
+  blockedLabels: 'blocked,waiting',
 };
 
 function loadConfig() {
   let cfg;
-  try { cfg = JSON.parse(localStorage.getItem('spConfig')); } catch { cfg = {}; }
+  try { cfg = JSON.parse(localStorage.getItem('ghConfig')); } catch { cfg = {}; }
   return { ...DEFAULTS, ...cfg };
 }
 
 function saveConfig() {
   const cfg = {
-    siteUrl: document.getElementById('cfgSiteUrl').value.trim(),
-    listName: document.getElementById('cfgListName').value.trim(),
-    titleField: document.getElementById('cfgTitleField').value.trim(),
-    respField: document.getElementById('cfgRespField').value.trim(),
-    statusField: document.getElementById('cfgStatusField').value.trim(),
-    completedVal: document.getElementById('cfgCompletedVal').value.trim(),
-    inProgVal: document.getElementById('cfgInProgVal').value.trim(),
+    token: document.getElementById('cfgToken').value.trim(),
+    owner: document.getElementById('cfgOwner').value.trim(),
+    repo: document.getElementById('cfgRepo').value.trim(),
+    inProgLabels: document.getElementById('cfgInProg').value.trim(),
+    completedLabels: document.getElementById('cfgCompleted').value.trim(),
+    blockedLabels: document.getElementById('cfgBlocked').value.trim(),
   };
-  localStorage.setItem('spConfig', JSON.stringify(cfg));
+  localStorage.setItem('ghConfig', JSON.stringify(cfg));
   hideConfig();
   refreshData();
 }
 
 function showConfig() {
   const cfg = loadConfig();
-  document.getElementById('cfgSiteUrl').value = cfg.siteUrl;
-  document.getElementById('cfgListName').value = cfg.listName;
-  document.getElementById('cfgTitleField').value = cfg.titleField;
-  document.getElementById('cfgRespField').value = cfg.respField;
-  document.getElementById('cfgStatusField').value = cfg.statusField;
-  document.getElementById('cfgCompletedVal').value = cfg.completedVal;
-  document.getElementById('cfgInProgVal').value = cfg.inProgVal;
+  document.getElementById('cfgToken').value = cfg.token;
+  document.getElementById('cfgOwner').value = cfg.owner;
+  document.getElementById('cfgRepo').value = cfg.repo;
+  document.getElementById('cfgInProg').value = cfg.inProgLabels;
+  document.getElementById('cfgCompleted').value = cfg.completedLabels;
+  document.getElementById('cfgBlocked').value = cfg.blockedLabels;
   document.getElementById('configPanel').style.display = 'block';
 }
 
@@ -228,144 +222,126 @@ function hideError() {
 async function refreshData() {
   hideError();
   document.getElementById('loadingIndicator').style.display = 'block';
+  document.getElementById('loadingText').textContent = 'Loading data from GitHub...';
   document.getElementById('tableWrapper').style.display = 'none';
   try {
-    STATE.items = await fetchSharePointData();
+    STATE.items = await fetchGitHubData();
     applyFilters();
+    document.getElementById('loadingIndicator').style.display = 'none';
+    document.getElementById('tableWrapper').style.display = '';
   } catch (err) {
+    document.getElementById('loadingIndicator').style.display = 'none';
     showError('Failed to load data: ' + err.message);
     STATE.items = [];
     applyFilters();
   }
-  document.getElementById('loadingIndicator').style.display = 'none';
-  document.getElementById('tableWrapper').style.display = '';
 }
 
-async function fetchSharePointData() {
+async function fetchGitHubData() {
   const cfg = loadConfig();
-  const ctx = window._spPageContextInfo;
+  if (!cfg.token) throw new Error('Please configure your GitHub Personal Access Token in Settings');
+  if (!cfg.owner || !cfg.repo) throw new Error('Please configure repo owner and name in Settings');
 
-  if (STATE.proxyMode) {
-    const resp = await fetch(PROXY_URL + '/api/data');
-    if (resp.status === 401 || resp.status === 403) {
-      const body = await resp.json().catch(() => ({}));
-      if (body.error === 'not_authenticated') {
-        const loginResp = await fetch(PROXY_URL + '/api/auth/login');
-        const flow = await loginResp.json();
-        if (flow.error) throw new Error(flow.error);
-        STATE.deviceCode = flow.device_code;
-        showDeviceCodeLogin(flow);
-        throw new Error('Please complete the login in your browser, then click Refresh.');
-      }
-      throw new Error(body.error || `Server returned ${resp.status}`);
-    }
-    if (!resp.ok) {
-      const text = await resp.text();
-      throw new Error(`Proxy error: HTTP ${resp.status} - ${text.slice(0, 200)}`);
-    }
-    const data = await resp.json();
-    const results = data.items || [];
-    return results.map(item => ({
-      id: item.Id,
-      title: item[cfg.titleField],
-      responsible: item[cfg.respField] || 'Unassigned',
-      status: item[cfg.statusField] || 'Not Started',
-    }));
-  }
+  const inProgSet = new Set(cfg.inProgLabels.split(',').map(s => s.trim().toLowerCase()));
+  const completedSet = new Set(cfg.completedLabels.split(',').map(s => s.trim().toLowerCase()));
+  const blockedSet = new Set(cfg.blockedLabels.split(',').map(s => s.trim().toLowerCase()));
 
-  let baseUrl;
-  if (ctx && ctx.webAbsoluteUrl) {
-    baseUrl = ctx.webAbsoluteUrl;
-  } else if (ctx && ctx.siteAbsoluteUrl) {
-    baseUrl = ctx.siteAbsoluteUrl;
-  } else {
-    baseUrl = 'https://sascontractingsa.sharepoint.com' + cfg.siteUrl;
-  }
+  let allIssues = [];
+  let page = 1;
+  let hasMore = true;
 
-  const listName = encodeURIComponent(cfg.listName);
-  const url = `${baseUrl}/_api/web/lists/getbytitle('${listName}')/items?$top=5000`;
-
-  const headers = { 'Accept': 'application/json;odata=verbose' };
-  if (ctx && ctx.formDigestValue) {
-    headers['X-RequestDigest'] = ctx.formDigestValue;
-  }
-
-  const resp = await fetch(url, { headers, credentials: 'include' });
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`HTTP ${resp.status}: ${text.slice(0, 200)}`);
-  }
-  const data = await resp.json();
-  const results = data.d ? data.d.results : data.value;
-  return results.map(item => ({
-    id: item.Id,
-    title: item[cfg.titleField],
-    responsible: item[cfg.respField] || 'Unassigned',
-    status: item[cfg.statusField] || 'Not Started',
-  }));
-}
-
-function showDeviceCodeLogin(flow) {
-  document.getElementById('loadingIndicator').innerHTML =
-    '<div style="text-align:center;padding:20px">' +
-    '<h3 style="margin-bottom:16px;color:#1a1a2e">Connect to SharePoint</h3>' +
-    '<p style="margin-bottom:12px;color:#555">1. Open the following URL in your browser:</p>' +
-    '<p style="margin-bottom:16px"><a href="' + escHtml(flow.verification_uri) + '" target="_blank" style="font-size:18px;color:#1a73e8">' + escHtml(flow.verification_uri) + '</a></p>' +
-    '<p style="margin-bottom:12px;color:#555">2. Enter this code:</p>' +
-    '<p style="font-size:32px;font-weight:700;letter-spacing:4px;color:#1a1a2e;background:#f0f2f5;display:inline-block;padding:12px 24px;border-radius:8px;font-family:monospace">' + escHtml(flow.user_code) + '</p>' +
-    '<p style="margin-top:20px;color:#888;font-size:13px">3. Sign in with your SharePoint account, then click <strong>Refresh</strong></p>' +
-    '<p style="margin-top:16px"><button onclick="pollAndRefresh()" style="padding:10px 28px;background:#1a73e8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:15px">Refresh</button></p>' +
-    '</div>';
-}
-
-async function pollAndRefresh() {
-  if (!STATE.deviceCode) { refreshData(); return; }
-  document.getElementById('loadingIndicator').innerHTML =
-    '<div class="spinner"></div><p style="margin-top:12px">Checking login status...</p>';
-  try {
-    const resp = await fetch(PROXY_URL + '/api/auth/poll', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ device_code: STATE.deviceCode }),
+  while (hasMore) {
+    const url = `https://api.github.com/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}/issues?state=all&per_page=100&page=${page}`;
+    const resp = await fetch(url, {
+      headers: {
+        'Accept': 'application/vnd.github+json',
+        'Authorization': 'Bearer ' + cfg.token,
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
     });
-    const result = await resp.json();
-    if (result.status === 'success') {
-      STATE.deviceCode = null;
-      await refreshData();
-    } else if (result.status === 'pending') {
-      document.getElementById('loadingIndicator').innerHTML =
-        '<p style="margin-top:12px;color:#888">Still waiting... Complete the login in your browser, then click Refresh again.</p>' +
-        '<p style="margin-top:12px"><button onclick="pollAndRefresh()" style="padding:10px 28px;background:#1a73e8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:15px">Check Again</button></p>';
-    } else {
-      showError('Login failed: ' + (result.description || result.error));
-      STATE.deviceCode = null;
-      refreshData();
+    if (resp.status === 401) throw new Error('Invalid token. Check your PAT and ensure it has repo scope.');
+    if (resp.status === 404) throw new Error('Repo not found. Check owner/name.');
+    if (resp.status === 403) {
+      const body = await resp.json().catch(() => ({}));
+      throw new Error(body.message || 'Rate limited. Try again later.');
     }
-  } catch (err) {
-    showError('Connection error: ' + err.message);
+    if (!resp.ok) throw new Error(`GitHub API: HTTP ${resp.status}`);
+    const issues = await resp.json();
+    if (!issues.length) break;
+    allIssues = allIssues.concat(issues);
+    const link = resp.headers.get('Link') || '';
+    hasMore = link.includes('rel="next"');
+    page++;
   }
+
+  return allIssues
+    .filter(issue => !issue.pull_request)
+    .map(issue => {
+      const labelNames = (issue.labels || []).map(l => typeof l === 'string' ? l : l.name).filter(Boolean);
+      const lowerLabels = labelNames.map(n => n.toLowerCase());
+      let status;
+      if (issue.state === 'closed' || lowerLabels.some(l => completedSet.has(l))) {
+        status = 'Completed';
+      } else if (lowerLabels.some(l => blockedSet.has(l))) {
+        status = 'Blocked';
+      } else if (lowerLabels.some(l => inProgSet.has(l))) {
+        status = 'In Progress';
+      } else {
+        status = 'Not Started';
+      }
+
+      let responsible = 'Unassigned';
+      if (issue.assignees && issue.assignees.length > 0) {
+        responsible = issue.assignees.map(a => a.login).join(', ');
+      } else if (issue.assignee) {
+        responsible = issue.assignee.login;
+      }
+
+      return {
+        id: issue.number,
+        title: issue.title,
+        url: issue.html_url,
+        responsible,
+        status,
+        labels: labelNames,
+        createdAt: issue.created_at,
+        updatedAt: issue.updated_at,
+      };
+    });
 }
 
 function applyFilters() {
-  const cfg = loadConfig();
   const raw = STATE.items;
   const personMap = {};
-  let total = 0, completed = 0, inProgress = 0, notStarted = 0;
+  let total = 0, completed = 0, inProgress = 0, notStarted = 0, blocked = 0;
 
   raw.forEach(item => {
-    const resp = (item.responsible || 'Unassigned').trim();
-    if (!personMap[resp]) personMap[resp] = { name: resp, total: 0, completed: 0, inProgress: 0, notStarted: 0, items: [] };
-    const p = personMap[resp];
-    p.total++;
-    p.items.push(item);
+    item.responsible.split(',').map(s => s.trim()).filter(Boolean).forEach(resp => {
+      if (!personMap[resp]) personMap[resp] = { name: resp, total: 0, completed: 0, inProgress: 0, notStarted: 0, blocked: 0 };
+      personMap[resp].total++;
+    });
     total++;
-    if (item.status === cfg.completedVal) { p.completed++; completed++; }
-    else if (item.status === cfg.inProgVal) { p.inProgress++; inProgress++; }
-    else { p.notStarted++; notStarted++; }
+    if (item.status === 'Completed') { completed++; }
+    else if (item.status === 'In Progress') { inProgress++; }
+    else if (item.status === 'Blocked') { blocked++; }
+    else { notStarted++; }
+  });
+
+  Object.keys(personMap).forEach(name => {
+    raw.forEach(item => {
+      const assignees = item.responsible.split(',').map(s => s.trim());
+      if (assignees.includes(name)) {
+        const p = personMap[name];
+        if (item.status === 'Completed') p.completed++;
+        else if (item.status === 'In Progress') p.inProgress++;
+        else if (item.status === 'Blocked') p.blocked++;
+        else p.notStarted++;
+      }
+    });
   });
 
   STATE.personMap = personMap;
-  STATE.stats = { total, completed, inProgress, notStarted };
+  STATE.stats = { total, completed, inProgress, notStarted, blocked };
 
   STATE.filtered = raw.slice();
   STATE.page = 0;
@@ -379,7 +355,7 @@ function applyFilters() {
 }
 
 function updateSummary() {
-  const s = STATE.stats || { total: 0, completed: 0, inProgress: 0, notStarted: 0 };
+  const s = STATE.stats || { total: 0, completed: 0, inProgress: 0, notStarted: 0, blocked: 0 };
   document.getElementById('statTotal').textContent = s.total;
   document.getElementById('statCompleted').textContent = s.completed;
   document.getElementById('statInProgress').textContent = s.inProgress;
@@ -398,9 +374,9 @@ function renderKPI() {
     const pct = p.total ? Math.round(p.completed / p.total * 100) : 0;
     const color = pct >= 80 ? '#1e7e34' : pct >= 50 ? '#e67e22' : '#b71c1c';
     return `<div class="kpi-card" style="border-left-color:${color}">
-      <div class="name">${escHtml(p.name)}</div>
+      <div class="name">@${escHtml(p.name)}</div>
       <div class="value">${p.completed} / ${p.total}</div>
-      <div class="sub">${pct}% &middot; ${p.inProgress} in progress &middot; ${p.notStarted} not started</div>
+      <div class="sub">${pct}% &middot; ${p.inProgress} in prog &middot; ${p.blocked} blocked &middot; ${p.notStarted} not started</div>
       <div class="bar-container"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
     </div>`;
   }).join('');
@@ -411,10 +387,11 @@ function renderChart() {
   const stats = STATE.stats || {};
   const entries = Object.values(map);
 
-  const labels = entries.map(p => p.name);
+  const labels = entries.map(p => '@' + p.name);
   const completedData = entries.map(p => p.completed);
   const inProgData = entries.map(p => p.inProgress);
   const notStartedData = entries.map(p => p.notStarted);
+  const blockedData = entries.map(p => p.blocked);
 
   const ctx1 = document.getElementById('chartPerson').getContext('2d');
   if (STATE.kpiChart) STATE.kpiChart.destroy();
@@ -425,6 +402,7 @@ function renderChart() {
       datasets: [
         { label: 'Completed', data: completedData, backgroundColor: '#2e7d32', borderRadius: 3 },
         { label: 'In Progress', data: inProgData, backgroundColor: '#f9a825', borderRadius: 3 },
+        { label: 'Blocked', data: blockedData, backgroundColor: '#e53935', borderRadius: 3 },
         { label: 'Not Started', data: notStartedData, backgroundColor: '#bdbdbd', borderRadius: 3 },
       ],
     },
@@ -444,10 +422,10 @@ function renderChart() {
   STATE.statusChart = new Chart(ctx2, {
     type: 'doughnut',
     data: {
-      labels: ['Completed', 'In Progress', 'Not Started'],
+      labels: ['Completed', 'In Progress', 'Blocked', 'Not Started'],
       datasets: [{
-        data: [stats.completed, stats.inProgress, stats.notStarted],
-        backgroundColor: ['#2e7d32', '#f9a825', '#bdbdbd'],
+        data: [stats.completed, stats.inProgress, stats.blocked, stats.notStarted],
+        backgroundColor: ['#2e7d32', '#f9a825', '#e53935', '#bdbdbd'],
         borderWidth: 0,
       }],
     },
@@ -468,17 +446,17 @@ function renderTable() {
     items = items.filter(it =>
       (it.title || '').toLowerCase().includes(filter) ||
       (it.responsible || '').toLowerCase().includes(filter) ||
-      (it.status || '').toLowerCase().includes(filter)
+      (it.status || '').toLowerCase().includes(filter) ||
+      (it.labels || []).some(l => l.toLowerCase().includes(filter))
     );
   }
 
-  const cfg = loadConfig();
   const key = STATE.sortKey;
   const asc = STATE.sortAsc;
   items = items.slice().sort((a, b) => {
     let va = (a[key] || '').toString().toLowerCase();
     let vb = (b[key] || '').toString().toLowerCase();
-    if (key === 'completed') { va = a.status === cfg.completedVal; vb = b.status === cfg.completedVal; }
+    if (key === 'completed') { va = a.status === 'Completed'; vb = b.status === 'Completed'; }
     return va < vb ? (asc ? -1 : 1) : va > vb ? (asc ? 1 : -1) : 0;
   });
 
@@ -492,13 +470,14 @@ function renderTable() {
 
   const tbody = document.getElementById('tableBody');
   tbody.innerHTML = pageItems.map(item => {
-    const isCompleted = item.status === cfg.completedVal;
-    const badgeClass = isCompleted ? 'badge-completed' : item.status === cfg.inProgVal ? 'badge-in-progress' : 'badge-not-started';
+    const badgeClass = item.status === 'Completed' ? 'badge-completed' :
+      item.status === 'In Progress' ? 'badge-in-progress' :
+      item.status === 'Blocked' ? 'badge-blocked' : 'badge-not-started';
     return `<tr>
-      <td>${escHtml(item.title)}</td>
+      <td><a href="${escHtml(item.url)}" target="_blank" style="color:#1a73e8;text-decoration:none">${escHtml(item.title)}</a></td>
       <td>${escHtml(item.responsible)}</td>
       <td><span class="badge ${badgeClass}">${escHtml(item.status)}</span></td>
-      <td>${isCompleted ? '&#10003;' : '&#8212;'}</td>
+      <td>${item.status === 'Completed' ? '&#10003;' : '&#8212;'}</td>
     </tr>`;
   }).join('');
 }
@@ -520,77 +499,17 @@ function escHtml(s) {
 }
 
 (async function init() {
-  showConfig();
-  try {
-    if (typeof window._spPageContextInfo !== 'undefined') {
-      await refreshData();
-      hideConfig();
-    } else {
-      STATE.proxyMode = true;
-      try {
-        const statusResp = await fetch(PROXY_URL + '/api/auth/status');
-        const status = await statusResp.json();
-        if (status.authenticated) {
-          await refreshData();
-          hideConfig();
-        } else {
-          document.getElementById('loadingIndicator').innerHTML =
-            '<p style="margin-top:20px">&#9888; Not connected to SharePoint.</p>' +
-            '<p style="margin-top:12px">Make sure the proxy server is running at <strong>' + PROXY_URL + '</strong></p>' +
-            '<p style="margin-top:8px">Run: <code style="background:#eee;padding:2px 8px;border-radius:4px">python server.py</code></p>' +
-            '<p style="margin-top:16px"><button onclick="startProxyLogin()" style="padding:10px 28px;background:#1a73e8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:15px">Connect to SharePoint</button></p>' +
-            '<p style="margin-top:12px">Or <a href="#" onclick="loadDemoData();return false" style="color:#1a73e8">load demo data</a> to preview.</p>';
-        }
-      } catch {
-        document.getElementById('loadingIndicator').innerHTML =
-          '<p style="margin-top:20px">&#9888; Cannot reach the proxy server.</p>' +
-          '<p style="margin-top:12px">Start the server by running:</p>' +
-          '<p style="margin-top:8px"><code style="background:#eee;padding:4px 12px;border-radius:4px;font-size:15px">python server.py</code></p>' +
-          '<p style="margin-top:12px">Then refresh this page.</p>' +
-          '<p style="margin-top:16px">Or <a href="#" onclick="loadDemoData();return false" style="color:#1a73e8">load demo data</a> to preview.</p>';
-      }
-    }
-  } catch {
+  const cfg = loadConfig();
+  if (cfg.token && cfg.owner && cfg.repo) {
+    await refreshData();
+  } else {
+    document.getElementById('loadingText').innerHTML =
+      'Configure your GitHub repo in <a href="#" onclick="showConfig();return false" style="color:#1a73e8">Settings</a>, then click Refresh.';
     document.getElementById('loadingIndicator').innerHTML =
-      '<p style="margin-top:16px">&#9888; Failed to initialize.</p>' +
-      '<p style="margin-top:12px"><a href="#" onclick="loadDemoData();return false" style="color:#1a73e8">Load demo data</a> to preview.</p>';
+      '<p style="margin-top:20px;color:#888">No GitHub configuration found.</p>' +
+      '<p style="margin-top:12px"><button onclick="showConfig()" style="padding:10px 28px;background:#1a73e8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:15px">Open Settings</button></p>';
   }
 })();
-
-async function startProxyLogin() {
-  document.getElementById('loadingIndicator').innerHTML =
-    '<div class="spinner"></div><p style="margin-top:12px">Connecting to SharePoint...</p>';
-  try {
-    const resp = await fetch(PROXY_URL + '/api/auth/login');
-    const flow = await resp.json();
-    if (flow.error) { showError(flow.error); return; }
-    STATE.deviceCode = flow.device_code;
-    showDeviceCodeLogin(flow);
-  } catch (err) {
-    showError('Failed to initiate login: ' + err.message);
-  }
-}
-
-function loadDemoData() {
-  const names = ['Alice Johnson', 'Bob Smith', 'Carol Davis', 'David Lee', 'Eve Martinez'];
-  const statuses = ['Completed', 'In Progress', 'Not Started'];
-  const items = [];
-  for (let i = 1; i <= 48; i++) {
-    const s = statuses[Math.floor(Math.random() * statuses.length)];
-    items.push({
-      id: i,
-      title: `Activity ${i}`,
-      responsible: names[Math.floor(Math.random() * names.length)],
-      status: s,
-    });
-  }
-  STATE.items = items;
-  applyFilters();
-  document.getElementById('loadingIndicator').style.display = 'none';
-  document.getElementById('tableWrapper').style.display = '';
-  hideError();
-  hideConfig();
-}
 </script>
 </body>
 </html>
