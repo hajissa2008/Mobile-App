@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Activity Completion Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f2f5; color: #333; padding: 20px; }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  .header h1 { font-size: 24px; font-weight: 600; color: #1a1a2e; }
+  .header-controls { display: flex; gap: 12px; align-items: center; }
+  .header-controls select, .header-controls input { padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+  .header-controls button { padding: 8px 16px; background: #1a73e8; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
+  .header-controls button:hover { background: #1557b0; }
+  .header-controls button.secondary { background: #fff; color: #333; border: 1px solid #ccc; }
+  .header-controls button.secondary:hover { background: #f5f5f5; }
+  .error-banner { background: #fdecea; color: #b71c1c; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; display: none; font-size: 14px; }
+  .error-banner.show { display: block; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .kpi-card { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); border-left: 4px solid #1a73e8; }
+  .kpi-card .name { font-size: 14px; color: #666; margin-bottom: 4px; }
+  .kpi-card .value { font-size: 28px; font-weight: 700; }
+  .kpi-card .sub { font-size: 12px; color: #888; margin-top: 4px; }
+  .kpi-card .bar-container { margin-top: 10px; height: 6px; background: #e0e0e0; border-radius: 3px; overflow: hidden; }
+  .kpi-card .bar-fill { height: 100%; border-radius: 3px; transition: width .6s ease; }
+  .summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .summary-card { background: #fff; border-radius: 12px; padding: 16px 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); text-align: center; }
+  .summary-card .label { font-size: 13px; color: #888; }
+  .summary-card .number { font-size: 26px; font-weight: 700; margin-top: 4px; }
+  .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .chart-box { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .chart-box h3 { font-size: 15px; color: #555; margin-bottom: 12px; }
+  .chart-box canvas { max-height: 260px; }
+  .table-container { background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08); overflow: hidden; }
+  .table-container .table-header { padding: 16px 20px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+  .table-container .table-header h3 { font-size: 15px; color: #555; }
+  .table-container .table-header input { padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; width: 200px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #fafafa; text-align: left; padding: 10px 16px; font-weight: 600; color: #555; border-bottom: 2px solid #eee; cursor: pointer; user-select: none; }
+  th:hover { color: #1a73e8; }
+  td { padding: 10px 16px; border-bottom: 1px solid #f0f0f0; }
+  tr:hover { background: #f8f9ff; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+  .badge-completed { background: #e6f4ea; color: #1e7e34; }
+  .badge-in-progress { background: #fff3cd; color: #856404; }
+  .badge-not-started { background: #f1f1f1; color: #666; }
+  .badge-blocked { background: #fdecea; color: #b71c1c; }
+  .pagination { padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #666; }
+  .pagination button { padding: 4px 12px; background: #fff; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; }
+  .pagination button:disabled { opacity: .4; cursor: default; }
+  .loading { text-align: center; padding: 60px 20px; color: #888; }
+  .loading .spinner { width: 36px; height: 36px; border: 3px solid #e0e0e0; border-top-color: #1a73e8; border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 12px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .config-panel { background: #fff; border-radius: 12px; padding: 20px 24px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 24px; }
+  .config-panel h3 { font-size: 15px; color: #555; margin-bottom: 12px; }
+  .config-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+  .config-field { display: flex; flex-direction: column; gap: 4px; }
+  .config-field label { font-size: 12px; color: #888; font-weight: 500; }
+  .config-field input, .config-field select { padding: 7px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; min-width: 180px; }
+  @media (max-width: 900px) { .charts-row { grid-template-columns: 1fr; } .summary-row { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Activity Completion Dashboard</h1>
+  <div class="header-controls">
+    <button class="secondary" onclick="showConfig()">Settings</button>
+    <button onclick="refreshData()">Refresh</button>
+  </div>
+</div>
+
+<div class="error-banner" id="errorBanner"></div>
+
+<div class="config-panel" id="configPanel" style="display:none">
+  <h3>SharePoint Configuration</h3>
+  <div class="config-row">
+    <div class="config-field">
+      <label>Site URL</label>
+      <input id="cfgSiteUrl" value="/sites/YourSite" placeholder="/sites/YourSite">
+    </div>
+    <div class="config-field">
+      <label>List Name</label>
+      <input id="cfgListName" value="Activities" placeholder="Activities">
+    </div>
+    <div class="config-field">
+      <label>Title Field</label>
+      <input id="cfgTitleField" value="Title" placeholder="Title">
+    </div>
+    <div class="config-field">
+      <label>Responsible Field</label>
+      <input id="cfgRespField" value="Responsible" placeholder="Responsible">
+    </div>
+    <div class="config-field">
+      <label>Status Field</label>
+      <input id="cfgStatusField" value="Status" placeholder="Status">
+    </div>
+    <div class="config-field">
+      <label>Completed Value</label>
+      <input id="cfgCompletedVal" value="Completed" placeholder="Completed">
+    </div>
+    <div class="config-field">
+      <label>In Progress Value</label>
+      <input id="cfgInProgVal" value="In Progress" placeholder="In Progress">
+    </div>
+    <div style="display:flex;gap:8px;align-items:flex-end">
+      <button onclick="saveConfig()">Apply</button>
+      <button class="secondary" onclick="hideConfig()">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="summary-row" id="summaryRow">
+  <div class="summary-card"><div class="label">Total Activities</div><div class="number" id="statTotal">0</div></div>
+  <div class="summary-card"><div class="label">Completed</div><div class="number" id="statCompleted">0</div></div>
+  <div class="summary-card"><div class="label">In Progress</div><div class="number" id="statInProgress">0</div></div>
+  <div class="summary-card"><div class="label">Not Started</div><div class="number" id="statNotStarted">0</div></div>
+</div>
+
+<div class="kpi-grid" id="kpiGrid"></div>
+
+<div class="charts-row">
+  <div class="chart-box"><h3>Completion by Person</h3><canvas id="chartPerson"></canvas></div>
+  <div class="chart-box"><h3>Overall Status Distribution</h3><canvas id="chartStatus"></canvas></div>
+</div>
+
+<div class="table-container" id="tableContainer">
+  <div class="table-header">
+    <h3>Activity List</h3>
+    <input id="tableFilter" placeholder="Filter activities..." oninput="renderTable()">
+  </div>
+  <div id="loadingIndicator" class="loading">
+    <div class="spinner"></div>
+    Loading data from SharePoint...
+  </div>
+  <div id="tableWrapper" style="display:none">
+    <table>
+      <thead><tr>
+        <th onclick="sortBy('title')">Activity</th>
+        <th onclick="sortBy('responsible')">Responsible</th>
+        <th onclick="sortBy('status')">Status</th>
+        <th onclick="sortBy('completed')">Completed</th>
+      </tr></thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div class="pagination">
+      <span id="pageInfo"></span>
+      <div><button id="prevBtn" onclick="prevPage()">Prev</button> <button id="nextBtn" onclick="nextPage()">Next</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const STATE = {
+  items: [],
+  filtered: [],
+  sortKey: 'title',
+  sortAsc: true,
+  page: 0,
+  pageSize: 20,
+  kpiChart: null,
+  statusChart: null,
+};
+
+const DEFAULTS = {
+  siteUrl: '/sites/YourSite',
+  listName: 'Activities',
+  titleField: 'Title',
+  respField: 'Responsible',
+  statusField: 'Status',
+  completedVal: 'Completed',
+  inProgVal: 'In Progress',
+};
+
+function loadConfig() {
+  let cfg;
+  try { cfg = JSON.parse(localStorage.getItem('spConfig')); } catch { cfg = {}; }
+  return { ...DEFAULTS, ...cfg };
+}
+
+function saveConfig() {
+  const cfg = {
+    siteUrl: document.getElementById('cfgSiteUrl').value.trim(),
+    listName: document.getElementById('cfgListName').value.trim(),
+    titleField: document.getElementById('cfgTitleField').value.trim(),
+    respField: document.getElementById('cfgRespField').value.trim(),
+    statusField: document.getElementById('cfgStatusField').value.trim(),
+    completedVal: document.getElementById('cfgCompletedVal').value.trim(),
+    inProgVal: document.getElementById('cfgInProgVal').value.trim(),
+  };
+  localStorage.setItem('spConfig', JSON.stringify(cfg));
+  hideConfig();
+  refreshData();
+}
+
+function showConfig() {
+  const cfg = loadConfig();
+  document.getElementById('cfgSiteUrl').value = cfg.siteUrl;
+  document.getElementById('cfgListName').value = cfg.listName;
+  document.getElementById('cfgTitleField').value = cfg.titleField;
+  document.getElementById('cfgRespField').value = cfg.respField;
+  document.getElementById('cfgStatusField').value = cfg.statusField;
+  document.getElementById('cfgCompletedVal').value = cfg.completedVal;
+  document.getElementById('cfgInProgVal').value = cfg.inProgVal;
+  document.getElementById('configPanel').style.display = 'block';
+}
+
+function hideConfig() {
+  document.getElementById('configPanel').style.display = 'none';
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorBanner');
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+function hideError() {
+  document.getElementById('errorBanner').classList.remove('show');
+}
+
+async function refreshData() {
+  hideError();
+  document.getElementById('loadingIndicator').style.display = 'block';
+  document.getElementById('tableWrapper').style.display = 'none';
+  try {
+    STATE.items = await fetchSharePointData();
+    applyFilters();
+  } catch (err) {
+    showError('Failed to load data: ' + err.message);
+    STATE.items = [];
+    applyFilters();
+  }
+  document.getElementById('loadingIndicator').style.display = 'none';
+  document.getElementById('tableWrapper').style.display = '';
+}
+
+async function fetchSharePointData() {
+  const cfg = loadConfig();
+  const ctx = SP.PageContextInfo || window._spPageContextInfo;
+  let baseUrl;
+
+  if (ctx && ctx.webAbsoluteUrl) {
+    baseUrl = ctx.webAbsoluteUrl;
+  } else if (ctx && ctx.siteAbsoluteUrl) {
+    baseUrl = ctx.siteAbsoluteUrl;
+  } else {
+    baseUrl = window.location.origin + cfg.siteUrl;
+  }
+
+  const listName = encodeURIComponent(cfg.listName);
+  const url = `${baseUrl}/_api/web/lists/getbytitle('${listName}')/items?$top=5000`;
+
+  const headers = {
+    'Accept': 'application/json;odata=verbose',
+  };
+  if (ctx && ctx.formDigestValue) {
+    headers['X-RequestDigest'] = ctx.formDigestValue;
+  }
+
+  const resp = await fetch(url, { headers, credentials: 'include' });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`HTTP ${resp.status}: ${text.slice(0, 200)}`);
+  }
+  const data = await resp.json();
+  const results = data.d ? data.d.results : data.value;
+  return results.map(item => ({
+    id: item.Id,
+    title: item[cfg.titleField],
+    responsible: item[cfg.respField] || 'Unassigned',
+    status: item[cfg.statusField] || 'Not Started',
+  }));
+}
+
+function applyFilters() {
+  const cfg = loadConfig();
+  const raw = STATE.items;
+  const personMap = {};
+  let total = 0, completed = 0, inProgress = 0, notStarted = 0;
+
+  raw.forEach(item => {
+    const resp = (item.responsible || 'Unassigned').trim();
+    if (!personMap[resp]) personMap[resp] = { name: resp, total: 0, completed: 0, inProgress: 0, notStarted: 0, items: [] };
+    const p = personMap[resp];
+    p.total++;
+    p.items.push(item);
+    total++;
+    if (item.status === cfg.completedVal) { p.completed++; completed++; }
+    else if (item.status === cfg.inProgVal) { p.inProgress++; inProgress++; }
+    else { p.notStarted++; notStarted++; }
+  });
+
+  STATE.personMap = personMap;
+  STATE.stats = { total, completed, inProgress, notStarted };
+
+  STATE.filtered = raw.slice();
+  STATE.page = 0;
+  STATE.sortKey = 'title';
+  STATE.sortAsc = true;
+
+  updateSummary();
+  renderKPI();
+  renderChart();
+  renderTable();
+}
+
+function updateSummary() {
+  const s = STATE.stats || { total: 0, completed: 0, inProgress: 0, notStarted: 0 };
+  document.getElementById('statTotal').textContent = s.total;
+  document.getElementById('statCompleted').textContent = s.completed;
+  document.getElementById('statInProgress').textContent = s.inProgress;
+  document.getElementById('statNotStarted').textContent = s.notStarted;
+}
+
+function renderKPI() {
+  const grid = document.getElementById('kpiGrid');
+  const map = STATE.personMap || {};
+  const entries = Object.values(map);
+  if (!entries.length) { grid.innerHTML = '<p style="color:#888;grid-column:1/-1">No data to display.</p>'; return; }
+
+  entries.sort((a, b) => b.total - a.total);
+
+  grid.innerHTML = entries.map(p => {
+    const pct = p.total ? Math.round(p.completed / p.total * 100) : 0;
+    const color = pct >= 80 ? '#1e7e34' : pct >= 50 ? '#e67e22' : '#b71c1c';
+    return `<div class="kpi-card" style="border-left-color:${color}">
+      <div class="name">${escHtml(p.name)}</div>
+      <div class="value">${p.completed} / ${p.total}</div>
+      <div class="sub">${pct}% &middot; ${p.inProgress} in progress &middot; ${p.notStarted} not started</div>
+      <div class="bar-container"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderChart() {
+  const map = STATE.personMap || {};
+  const stats = STATE.stats || {};
+  const entries = Object.values(map);
+
+  // Person completion chart
+  const labels = entries.map(p => p.name);
+  const completedData = entries.map(p => p.completed);
+  const inProgData = entries.map(p => p.inProgress);
+  const notStartedData = entries.map(p => p.notStarted);
+
+  const ctx1 = document.getElementById('chartPerson').getContext('2d');
+  if (STATE.kpiChart) STATE.kpiChart.destroy();
+  STATE.kpiChart = new Chart(ctx1, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Completed', data: completedData, backgroundColor: '#2e7d32', borderRadius: 3 },
+        { label: 'In Progress', data: inProgData, backgroundColor: '#f9a825', borderRadius: 3 },
+        { label: 'Not Started', data: notStartedData, backgroundColor: '#bdbdbd', borderRadius: 3 },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 12 } } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true, ticks: { stepSize: 1 } },
+      },
+    },
+  });
+
+  // Status pie chart
+  const ctx2 = document.getElementById('chartStatus').getContext('2d');
+  if (STATE.statusChart) STATE.statusChart.destroy();
+  STATE.statusChart = new Chart(ctx2, {
+    type: 'doughnut',
+    data: {
+      labels: ['Completed', 'In Progress', 'Not Started'],
+      datasets: [{
+        data: [stats.completed, stats.inProgress, stats.notStarted],
+        backgroundColor: ['#2e7d32', '#f9a825', '#bdbdbd'],
+        borderWidth: 0,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 12, padding: 12 } },
+      },
+    },
+  });
+}
+
+function renderTable() {
+  const filter = (document.getElementById('tableFilter').value || '').toLowerCase();
+  let items = STATE.filtered;
+  if (filter) {
+    items = items.filter(it =>
+      (it.title || '').toLowerCase().includes(filter) ||
+      (it.responsible || '').toLowerCase().includes(filter) ||
+      (it.status || '').toLowerCase().includes(filter)
+    );
+  }
+
+  const cfg = loadConfig();
+  const key = STATE.sortKey;
+  const asc = STATE.sortAsc;
+  items = items.slice().sort((a, b) => {
+    let va = (a[key] || '').toString().toLowerCase();
+    let vb = (b[key] || '').toString().toLowerCase();
+    if (key === 'completed') { va = a.status === cfg.completedVal; vb = b.status === cfg.completedVal; }
+    return va < vb ? (asc ? -1 : 1) : va > vb ? (asc ? 1 : -1) : 0;
+  });
+
+  const start = STATE.page * STATE.pageSize;
+  const pageItems = items.slice(start, start + STATE.pageSize);
+  const totalPages = Math.ceil(items.length / STATE.pageSize) || 1;
+
+  document.getElementById('pageInfo').textContent = `Page ${STATE.page + 1} of ${totalPages} (${items.length} items)`;
+  document.getElementById('prevBtn').disabled = STATE.page === 0;
+  document.getElementById('nextBtn').disabled = STATE.page >= totalPages - 1;
+
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = pageItems.map(item => {
+    const isCompleted = item.status === cfg.completedVal;
+    const badgeClass = isCompleted ? 'badge-completed' : item.status === cfg.inProgVal ? 'badge-in-progress' : 'badge-not-started';
+    return `<tr>
+      <td>${escHtml(item.title)}</td>
+      <td>${escHtml(item.responsible)}</td>
+      <td><span class="badge ${badgeClass}">${escHtml(item.status)}</span></td>
+      <td>${isCompleted ? '&#10003;' : '&#8212;'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function sortBy(key) {
+  if (STATE.sortKey === key) STATE.sortAsc = !STATE.sortAsc;
+  else { STATE.sortKey = key; STATE.sortAsc = true; }
+  renderTable();
+}
+
+function prevPage() { if (STATE.page > 0) { STATE.page--; renderTable(); } }
+function nextPage() { STATE.page++; renderTable(); }
+
+function escHtml(s) {
+  if (s == null) return '';
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// Try connecting to SharePoint if available, otherwise show demo data
+(async function init() {
+  showConfig();
+  try {
+    if (typeof SP !== 'undefined' || typeof window._spPageContextInfo !== 'undefined') {
+      await refreshData();
+      hideConfig();
+    } else {
+      document.getElementById('loadingIndicator').innerHTML =
+        '<p style="margin-top:20px">Not running in SharePoint. <a href="#" onclick="loadDemoData();return false">Load demo data</a> to preview.</p>';
+    }
+  } catch {
+    document.getElementById('loadingIndicator').innerHTML =
+      '<p style="margin-top:20px">Not connected to SharePoint. <a href="#" onclick="loadDemoData();return false">Load demo data</a> to preview.</p>';
+  }
+})();
+
+function loadDemoData() {
+  const names = ['Alice Johnson', 'Bob Smith', 'Carol Davis', 'David Lee', 'Eve Martinez'];
+  const statuses = ['Completed', 'In Progress', 'Not Started'];
+  const items = [];
+  for (let i = 1; i <= 48; i++) {
+    const s = statuses[Math.floor(Math.random() * statuses.length)];
+    items.push({
+      id: i,
+      title: `Activity ${i}`,
+      responsible: names[Math.floor(Math.random() * names.length)],
+      status: s,
+    });
+  }
+  STATE.items = items;
+  applyFilters();
+  document.getElementById('loadingIndicator').style.display = 'none';
+  document.getElementById('tableWrapper').style.display = '';
+  hideError();
+  hideConfig();
+}
+</script>
+</body>
+</html>
