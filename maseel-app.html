@@ -1216,7 +1216,7 @@ async function silentRefresh() {
 var MO=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function fd(d){if(!d)return'—';var p=d.split('-');return MO[+p[1]-1]+' '+(+p[2]);}
 function phOf(id){for(var i=0;i<PH.length;i++)if(PH[i].id===id)return PH[i];return null;}
-function detectPhaseFromId(id){var m=id.match(/P([1-5])(?:\(\d+\))?/i);return m?'Phase '+m[1]:'Unassigned';}
+function detectPhaseFromId(id,title){var m=id.match(/P([1-5])(?:\(\d+\))?/i);if(m)return'Phase '+m[1];if(title){var n=title.match(/ph0?([1-5])/i);if(n)return'Phase '+n[1];}return'Unassigned';}
 function calcDur(a){if(!a.s||!a.f)return 0;return Math.max(0,Math.round((new Date(a.f)-new Date(a.s))/(86400000)));}
 function acOf(id){for(var i=0;i<AC.length;i++)if(AC[i].id===id)return AC[i];return null;}
 function sk(s){return s==='Not Started'?'ns':s==='In Progress'?'ip':s==='Done'?'dn':s==='Partially Inspected'?'pi':'fi';}
@@ -1349,7 +1349,7 @@ function rToday(){
       active.push(a);
   }
   var grp={};
-  for(var i=0;i<active.length;i++){var a=active[i],p=detectPhaseFromId(a.id);if(!grp[p])grp[p]=[];grp[p].push(a);}
+  for(var i=0;i<active.length;i++){var a=active[i],p=detectPhaseFromId(a.id,a.title);if(!grp[p])grp[p]=[];grp[p].push(a);}
 
   var h=connBanner()+permBanner()+
     '<div class="ph-hdr">'+
@@ -1418,7 +1418,7 @@ function rToday(){
 }
 
 function buildCard(a){
-  var st=effSt(a),pc=effPc(a),k=sk(st),dp=detectPhaseFromId(a.id),c=COL[dp]||'#8B9BB4';
+  var st=effSt(a),pc=effPc(a),k=sk(st),dp=detectPhaseFromId(a.id,a.title),c=COL[dp]||'#8B9BB4';
   return'<div class="card'+(st==='Done'?' fade-c':'')+'" onclick="openSheet(\''+a.id+'\')" style="border-left:none">'+
     '<div class="stripe" style="background:'+c+'"></div>'+
     '<div class="crow">'+
@@ -1462,7 +1462,7 @@ function rTimeline(){
   /* Group by detected phase from ID */
   var phMap={},phActs={};
   for(var i=0;i<vAC.length;i++){
-    var a=vAC[i],p=detectPhaseFromId(a.id),st=effSt(a);
+    var a=vAC[i],p=detectPhaseFromId(a.id,a.title),st=effSt(a);
     if(!showDone&&st==='Done')continue;
     if(q&&a.title.toLowerCase().indexOf(q)===-1&&a.id.toLowerCase().indexOf(q)===-1&&(a.disc||'').toLowerCase().indexOf(q)===-1)continue;
     if(!phActs[p]){phActs[p]=[];phMap[p]={done:0,total:0};}
