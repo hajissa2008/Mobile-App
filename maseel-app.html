@@ -2082,7 +2082,7 @@ async function sendInspectionEmail(id,title){
   }else{body+='No inspection entries yet';}
   body+='</p><p>To Access the request, please find the below Link of Maseel App, and proceed to \u201cFor Inspection\u201d to proceed with inspection<br>'+
     '<a href="https://hajissa2008.github.io/Mobile-App/maseel-app.html">https://hajissa2008.github.io/Mobile-App/maseel-app.html</a></p>';
-  var msg={subject:'Inspection Required: '+escH(title||id),body:{contentType:'HTML',content:body},toRecipients:[{emailAddress:{address:INSPECT_EMAIL}}]};
+  var msg={subject:'Inspection Required: '+escH(title||id),body:{contentType:'HTML',content:body},toRecipients:[{emailAddress:{address:NOTIFY_EMAIL}}]};
   var photo=getPhoto(id);
   console.log('[mail] sendInspection getPhoto('+id+'):',photo?'found ('+photo.length+' chars)':'null');
   if(photo){
@@ -2092,7 +2092,7 @@ async function sendInspectionEmail(id,title){
   var payload={message:msg,saveToSentItems:true};
   try{
     var res=await fetch('https://graph.microsoft.com/v1.0/me/sendMail',{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    if(res.ok)showToast('✓ Email sent to '+INSPECT_EMAIL+(photo?' with photo':''));
+    if(res.ok)showToast('✓ Email sent to '+NOTIFY_EMAIL+(photo?' with photo':''));
     else{var et=await res.text();console.log('[mail] send error:',res.status,et);showToast('Failed to send email');}
   }catch(e){console.log('[mail] fetch error:',e);showToast('Failed to send email');}
 }
