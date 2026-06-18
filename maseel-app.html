@@ -2069,16 +2069,20 @@ async function sendInspectionEmail(id,title){
   if(!token){showToast('Sign in to send email');return;}
   var a=acOf(id),tot=a?a.totalQty||0:0,ins=inspQty(id),rq=readyQty(id);
   var dateStr=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
-  var body='<b>Task:</b> '+escH(title||id)+'<br><b>ID:</b> '+id+'<br><b>Date:</b> '+dateStr+'<br><br><b>Inspection Quantity</b><br>'+
-    'Total: '+tot+' '+(a&&a.unit||'')+'<br>Ready: '+rq+'<br>Inspected: '+ins+'<br>Remaining: '+Math.max(0,rq-ins)+'<br><br><b>Inspection History</b><br>';
+  var body='<p>Dear Eng. Hassan,</p><p>Please find the below task inspection request to inspect as below:</p>'+
+    '<p><b>Task:</b> '+escH(title||id)+'<br><b>ID:</b> '+id+'<br><b>Date:</b> '+dateStr+'</p>'+
+    '<p><b>Inspection Quantity</b><br>Total: '+tot+' '+(a&&a.unit||'')+'<br>Ready: '+rq+'<br>Inspected: '+ins+'<br>Remaining: '+Math.max(0,rq-ins)+'</p>'+
+    '<p><b>Inspection History</b><br>';
   var hist=ST.overrides[id]&&ST.overrides[id].ins?ST.overrides[id].ins:[];
   if(hist.length){
     for(var hi=0;hi<hist.length;hi++){
       var hh=hist[hi];var hd=new Date(hh.d);
-      body+= (hh.r==='Passed'?'✓':'✗')+' '+hh.q+' — '+pad(hd.getDate())+'/'+pad(hd.getMonth()+1)+' '+pad(hd.getHours())+':'+pad(hd.getMinutes())+'<br>';
+      body+= (hh.r==='Passed'?'✓':'✗')+' '+hh.q+' \u2014 '+pad(hd.getDate())+'/'+pad(hd.getMonth()+1)+' '+pad(hd.getHours())+':'+pad(hd.getMinutes())+'<br>';
     }
-  }else{body+='No inspection entries yet<br>';}
-  var msg={subject:'Inspection Required: '+escH(title||id),body:{contentType:'HTML',content:body},toRecipients:[{emailAddress:{address:NOTIFY_EMAIL}}]};
+  }else{body+='No inspection entries yet';}
+  body+='</p><p>To Access the request, please find the below Link of Maseel App, and proceed to \u201cFor Inspection\u201d to proceed with inspection<br>'+
+    '<a href="https://hajissa2008.github.io/Mobile-App/maseel-app.html">https://hajissa2008.github.io/Mobile-App/maseel-app.html</a></p>';
+  var msg={subject:'Inspection Required: '+escH(title||id),body:{contentType:'HTML',content:body},toRecipients:[{emailAddress:{address:INSPECT_EMAIL}}]};
   var photo=getPhoto(id);
   console.log('[mail] sendInspection getPhoto('+id+'):',photo?'found ('+photo.length+' chars)':'null');
   if(photo){
@@ -2088,7 +2092,7 @@ async function sendInspectionEmail(id,title){
   var payload={message:msg,saveToSentItems:true};
   try{
     var res=await fetch('https://graph.microsoft.com/v1.0/me/sendMail',{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    if(res.ok)showToast('✓ Email sent to '+NOTIFY_EMAIL+(photo?' with photo':''));
+    if(res.ok)showToast('✓ Email sent to '+INSPECT_EMAIL+(photo?' with photo':''));
     else{var et=await res.text();console.log('[mail] send error:',res.status,et);showToast('Failed to send email');}
   }catch(e){console.log('[mail] fetch error:',e);showToast('Failed to send email');}
 }
