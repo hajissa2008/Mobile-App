@@ -1922,15 +1922,7 @@ async function syncAll(){
       if(o.st){fields.field_10=o.st;}
       if(o.notes){fields.field_11=o.notes;}
       if(o.responsibleList){
-        var resp=o.responsibleList.join('; ');
-        if(o.st==='For Inspection'){
-          if(resp.toLowerCase().indexOf(INSPECT_EMAIL)<0)
-            fields.field_8=resp?resp+', '+INSPECT_EMAIL:INSPECT_EMAIL;
-          else
-            fields.field_8=resp;
-        } else {
-          fields.field_8=resp;
-        }
+        fields.field_8=o.responsibleList.join('; ');
       }
       var ok=await updateListItem(token, itemId, fields);
       if(ok){synced++;
