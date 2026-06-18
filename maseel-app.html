@@ -548,29 +548,17 @@ function removePhoto(id){var p=loadPhotos();delete p[id];savePhotos(p);}
 function loadLogs(){try{var d=localStorage.getItem('maseel_logs');return d?JSON.parse(d):[];}catch(e){return [];}}
 function saveLogs(l){try{localStorage.setItem('maseel_logs',JSON.stringify(l));}catch(e){}}
 function addLog(id,action,details){
-  var logs=loadLogs();
   var user=userEmail()||'unknown';
-  logs.push({id:id,ts:new Date().toISOString(),user:user,action:action,details:details||''});
-  saveLogs(logs);
+  var entry={id:id,ts:new Date().toISOString(),user:user,action:action,details:details||''};
+  /* Always save to localStorage as fallback */
+  var logs=loadLogs();logs.push(entry);saveLogs(logs);
+  /* Try SharePoint too (fire-and-forget) */
+  getGraphToken().then(function(token){if(token&&LOG_LIST_ID)createLogListItem(token,entry);}).catch(function(){});
 }
 function getLogs(id){
   return loadLogs().filter(function(l){return l.id===id;}).sort(function(a,b){return a.ts<b.ts?1:a.ts>b.ts?-1:0;});
 }
-function renderLogs(id){
-  var logs=getLogs(id);
-  if(!logs.length)return'<div style="font-size:11px;color:var(--t3);padding:8px 0">No activity log</div>';
-  var h='<div style="max-height:200px;overflow-y:auto">';
-  for(var i=0;i<logs.length;i++){
-    var l=logs[i],d=new Date(l.ts);
-    var ds=pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear()+' '+pad(d.getHours())+':'+pad(d.getMinutes());
-    h+='<div style="display:flex;gap:6px;padding:4px 0;font-size:10px;border-bottom:1px solid var(--bd)">'+
-      '<span style="color:var(--t3);white-space:nowrap;min-width:70px">'+ds+'</span>'+
-      '<span style="color:var(--bl);white-space:nowrap;min-width:60px">'+escH(l.user.split('@')[0])+'</span>'+
-      '<span style="color:var(--t1)">'+escH(l.action)+(l.details?': '+escH(l.details):'')+'</span></div>';
-  }
-  h+='</div>';
-  return h;
-}
+function renderLogs(id){return renderLogsFromArray(getLogs(id));}
 
 /* ══════════════════════════════════════════
    AUTH — Office 365 SSO (MSAL, optional)
@@ -628,6 +616,8 @@ async function getGraphToken(){
 ══════════════════════════════════════════ */
 var SITE_ID = null;
 var SCHED_LIST_ID = null;
+var LOG_LIST_ID = null;
+var LOG_LIST_NAME = 'ActivityLog';
 
 /* Parse the SharePoint site hostname and path from the site URL */
 function siteInfoFromShareUrl(url){
@@ -671,13 +661,15 @@ async function ensureLists(){
     var data=await res.json();
     if(data.value){
       for(var i=0;i<data.value.length;i++){
-        if(data.value[i].displayName===LIST_NAME){SCHED_LIST_ID=data.value[i].id;break;}
+        if(data.value[i].displayName===LIST_NAME){SCHED_LIST_ID=data.value[i].id;}
+        if(data.value[i].displayName===LOG_LIST_NAME){LOG_LIST_ID=data.value[i].id;}
       }
     }
     if(SCHED_LIST_ID){
       try{localStorage.setItem('maseel_sched_list',SCHED_LIST_ID);localStorage.setItem('maseel_site_url',SP_SHARE_URL);}catch(e){}
-      return true;
     }
+    if(!LOG_LIST_ID)await ensureLogList(token);
+    if(SCHED_LIST_ID)return true;
     DS.errDetail='List "'+LIST_NAME+'" not found, creating…';
     return await createAndMigrateLists(token);
   }catch(e){console.error('[list] ensureLists error:', e);DS.errDetail=DS.errDetail||e.message;return false;}
@@ -786,6 +778,58 @@ async function updateListItem(token, itemId, fields){
     body:JSON.stringify(fields)
   });
   return res.ok;
+}
+
+/* Create a log entry in the SharePoint ActivityLog list */
+async function createLogListItem(token, entry){
+  if(!LOG_LIST_ID)return false;
+  try{
+    var res=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists/'+LOG_LIST_ID+'/items', {
+      method:'POST',
+      headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+      body:JSON.stringify({fields:{
+        Title:entry.id, Timestamp:entry.ts, UserEmail:entry.user,
+        Action:entry.action, Details:entry.details||''
+      }})
+    });
+    return res.ok;
+  }catch(e){console.error('[log] create error:',e);return false;}
+}
+
+/* Fetch log entries for a specific activity from SharePoint */
+async function fetchLogsForActivity(token, id){
+  if(!LOG_LIST_ID)return null;
+  try{
+    var url=GRAPH_SITES_BASE+SITE_ID+'/lists/'+LOG_LIST_ID+'/items?expand=fields&$filter=Title eq \''+id.replace(/'/g,"''")+'\'&$top=200&$orderby=fields/Timestamp desc';
+    var res=await fetch(url, {headers:{'Authorization':'Bearer '+token}});
+    if(!res.ok)return null;
+    var data=await res.json();
+    if(!data.value||!data.value.length)return [];
+    return data.value.map(function(item){return{id:item.fields.Title,ts:item.fields.Timestamp,user:item.fields.UserEmail||'',action:item.fields.Action||'',details:item.fields.Details||''};});
+  }catch(e){console.error('[log] fetch error:',e);return null;}
+}
+
+/* Ensure the ActivityLog list exists */
+async function ensureLogList(token){
+  try{
+    var res=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists', {
+      method:'POST',
+      headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+      body:JSON.stringify({
+        displayName:LOG_LIST_NAME,
+        description:'Audit log for activity modifications',
+        columns:[
+          {name:'Timestamp',dateTime:{format:'dateTime'}},
+          {name:'UserEmail',text:{maxLength:255}},
+          {name:'Action',text:{maxLength:255}},
+          {name:'Details',text:{maxLength:2000,allowMultipleLines:true}}
+        ]
+      })
+    });
+    if(res.ok){var l=await res.json();LOG_LIST_ID=l.id;showToast('✓ ActivityLog list created');return true;}
+    console.error('[log] create list failed:',res.status);
+    return false;
+  }catch(e){console.error('[log] create list error:',e);return false;}
 }
 
 /* Convert list item fields to our activity format */
@@ -1699,6 +1743,39 @@ function openSheet(id){
   var el=document.getElementById('sheet');if(el)el.innerHTML=h;
   var ov=document.getElementById('fov');if(ov)ov.classList.add('open');
   ST.selId=id;
+  /* Async fetch logs from SharePoint to merge with localStorage */
+  if(LOG_LIST_ID)refreshLogsFromSP(id);
+}
+async function refreshLogsFromSP(id){
+  var token=await getGraphToken();
+  if(!token)return;
+  var spLogs=await fetchLogsForActivity(token,id);
+  if(!spLogs||!spLogs.length)return;
+  /* Merge: localStorage logs + SP logs, deduplicate by ts+user+action */
+  var local=loadLogs().filter(function(l){return l.id===id;});
+  var all=local.slice();
+  for(var i=0;i<spLogs.length;i++){
+    var dup=false;
+    for(var j=0;j<local.length;j++){if(local[j].ts===spLogs[i].ts&&local[j].user===spLogs[i].user&&local[j].action===spLogs[i].action){dup=true;break;}}
+    if(!dup)all.push(spLogs[i]);
+  }
+  all.sort(function(a,b){return a.ts<b.ts?1:a.ts>b.ts?-1:0;});
+  var el=document.getElementById('act-log');
+  if(el)el.innerHTML=renderLogsFromArray(all);
+}
+function renderLogsFromArray(logs){
+  if(!logs.length)return'<div style="font-size:11px;color:var(--t3);padding:8px 0">No activity log</div>';
+  var h='<div style="max-height:200px;overflow-y:auto">';
+  for(var i=0;i<logs.length;i++){
+    var l=logs[i],d=new Date(l.ts);
+    var ds=pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear()+' '+pad(d.getHours())+':'+pad(d.getMinutes());
+    h+='<div style="display:flex;gap:6px;padding:4px 0;font-size:10px;border-bottom:1px solid var(--bd)">'+
+      '<span style="color:var(--t3);white-space:nowrap;min-width:70px">'+ds+'</span>'+
+      '<span style="color:var(--bl);white-space:nowrap;min-width:60px">'+escH(l.user.split('@')[0])+'</span>'+
+      '<span style="color:var(--t1)">'+escH(l.action)+(l.details?': '+escH(l.details):'')+'</span></div>';
+  }
+  h+='</div>';
+  return h;
 }
 function closeSheet(){var ov=document.getElementById('fov');if(ov)ov.classList.remove('open');var po=document.querySelector('div[style*="z-index:1000"]');if(po)po.remove();}
 function selSt(k,col){
@@ -1738,8 +1815,8 @@ function addAssignee(){
   saveOverrides();addLog(ST.selId,'Assignee added',e);
   var el=document.getElementById('assignee-list');
   if(el)el.innerHTML=assigneeChips(ST.selId);
-  inp.value='';
-  showToast('✓ Added '+e);
+  inp.value='';showToast('✓ Added '+e);
+  var al=document.getElementById('act-log');if(al)al.innerHTML=renderLogs(ST.selId);refreshLogsFromSP(ST.selId);
 }
 function removeAssignee(id,email){
   if(userRole()!=='admin')return;
@@ -1753,6 +1830,7 @@ function removeAssignee(id,email){
   var el=document.getElementById('assignee-list');
   if(el)el.innerHTML=assigneeChips(id);
   showToast('✓ Removed '+email);
+  var al=document.getElementById('act-log');if(al)al.innerHTML=renderLogs(id);refreshLogsFromSP(id);
 }
 function pad(n){return n<10?'0'+n:n;}
 function inspSection(id){
