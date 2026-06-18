@@ -475,7 +475,7 @@ _maseel_ready = 1;
    SHAREPOINT CONFIG
 ══════════════════════════════════════════ */
 var FILE_NAME    = 'EMSL-15-P6 Update 3-Jun-2026 G.xlsx';
-var DATA_DATE    = '2026-06-03';
+var DATA_DATE    = new Date().toISOString().split('T')[0];
 var SP_SHARE_URL = 'https://sascontractingsa.sharepoint.com/sites/Alenshaiah';
 var SP_EXCEL_URL = 'https://sascontractingsa-my.sharepoint.com/:x:/g/personal/m_hajissa_alenshaiah_com/IQBWPlRlHWXfRaDvQFQ_KwqwAev8f2TofrG6dDr2S7g3KVc?e=FdWMQt';
 var SP_LIST_URL  = 'https://sascontractingsa.sharepoint.com/:l:/s/Alenshaiah/JADTaPVa2_dMRbjaGE50d5mjAZ8Iv9JsP2DAd2G1dFjN3Gc?e=ntnnLn';
@@ -763,7 +763,7 @@ async function updateListItem(token, itemId, fields){
 
 /* Convert list item fields to our activity format */
 function listItemToActivity(fields, itemId){
-  function toDateStr(v){return v?new Date(v).toISOString().split('T')[0]:null;}
+  function toDateStr(v){if(!v)return null;var s=String(v);return s.indexOf('T')>=0?s.split('T')[0]:s.substring(0,10);}
   function str(v){return v!=null&&v!==undefined?String(v):'';}
   function num(v){if(v==null)return null;var n=parseFloat(v);return isNaN(n)?null:n;}
   var a={
