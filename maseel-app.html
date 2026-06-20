@@ -1781,8 +1781,8 @@ function openSheet(id){
       '<button class="ph-btn" onclick="attachPhoto()">📷 Photo</button>'+
       (getPhoto(id)?'<span style="font-size:12px;font-weight:700;color:var(--gr);cursor:pointer;text-decoration:underline" onclick="showPhoto(\''+getPhoto(id)+'\')">photo.jpeg</span>':'')+
     '</div></div>'+
-    (function(){var _a=acOf(id);var _ctx=listCtx();var _fn=_a&&_a._attachName||'';var _fl=_fn.split(/[,;]+/).map(function(x){return x.trim();}).filter(function(x){return x;});if(!_a||!_a._listItemId||!_ctx||!_ctx.siteUrl||!_ctx.listName||!_fl.length)return'';var _bu=_ctx.siteUrl+'/Lists/'+encodeURIComponent(_ctx.listName)+'/Attachments/'+_a._listItemId+'/';if(!ST._atts)ST._atts={};ST._atts[id]=_fl.map(function(fn2){return{name:fn2,url:_bu+encodeURIComponent(fn2)};});var _h='<div class="sh-sec"><div class="sh-sl">Attachments</div>';for(var _i=0;_i<_fl.length;_i++){var _e=_fl[_i].split('.').pop().toLowerCase();var _ii=['jpg','jpeg','png','gif','bmp','webp','svg'].indexOf(_e)>=0;_h+='<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--bd)"><span>'+
-      (_ii?'🖼':'📄')+'</span><span style="flex:1;color:var(--t1);font-weight:600;font-size:12px">'+escH(_fl[_i])+'</span><button style="background:rgba(59,130,246,.12);color:var(--bl);border:0;padding:4px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit" onclick="(function(){var _as=ST._atts&&ST._atts[\''+id+'\'];if(_as&&_as['+_i+'])window.open(_as['+_i+'].url,\'_blank\');})()">Open</button></div>';}_h+='</div>';return _h;})()+
+    (function(){try{var _a=acOf(id);var _ctx=listCtx();var _fn=_a&&_a._attachName||'';var _fl=_fn.split(/[,;]+/).map(function(x){return x.trim();}).filter(function(x){return x;});if(!_a||!_a._listItemId||!_ctx||!_ctx.siteUrl||!_ctx.listName||!_fl.length)return'';var _bu=_ctx.siteUrl+'/Lists/'+encodeURIComponent(_ctx.listName)+'/Attachments/'+_a._listItemId+'/';if(!ST._atts)ST._atts={};ST._atts[id]=_fl.map(function(fn2){return{name:fn2,url:_bu+encodeURIComponent(fn2)};});var _h='<div class="sh-sec"><div class="sh-sl">Attachments</div>';for(var _i=0;_i<_fl.length;_i++){var _e=_fl[_i].split('.').pop().toLowerCase();var _ii=['jpg','jpeg','png','gif','bmp','webp','svg'].indexOf(_e)>=0;_h+='<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--bd)"><span>'+
+      (_ii?'🖼':'📄')+'</span><span style="flex:1;color:var(--t1);font-weight:600;font-size:12px">'+escH(_fl[_i])+'</span><button style="background:rgba(59,130,246,.12);color:var(--bl);border:0;padding:4px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit" onclick="openAtt(\''+id.replace(/'/g,"\\'")+'\','+_i+')">Open</button></div>';}_h+='</div>';return _h;}catch(e){return'';}})()+
     '<div class="sh-sec"><div class="sh-sl">Activity Log</div><div id="act-log">'+renderLogs(id)+'</div></div>'+
     '<div class="sh-btns">'+
       '<button class="btn-cal idle-cal" id="bcal" onclick="addCal()">'+I.cal+'<span id="bcaltx"> Calendar</span></button>'+
@@ -2054,6 +2054,10 @@ function connectList(){
   SITE_ID=null;SCHED_LIST_ID=null;
   showToast('List configured — refreshing…');
   refresh();
+}
+function openAtt(id,idx){
+  var ats=ST._atts&&ST._atts[id];
+  if(ats&&ats[idx])window.open(ats[idx].url,'_blank');
 }
 function disconnectList(){
   try{localStorage.removeItem('maseel_list_ctx');}catch(e){}
