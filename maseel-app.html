@@ -1780,6 +1780,8 @@ function openSheet(id){
       '<button class="ph-btn" onclick="attachPhoto()">📷 Photo</button>'+
       (getPhoto(id)?'<span style="font-size:12px;font-weight:700;color:var(--gr);cursor:pointer;text-decoration:underline" onclick="showPhoto(\''+getPhoto(id)+'\')">photo.jpeg</span>':'')+
     '</div></div>'+
+    '<div class="sh-sec"><div class="sh-sl">Attachments</div><div id="attach-list">'+
+      '<div style="font-size:12px;color:var(--t3);padding:4px 0">Loading…</div></div></div>'+
     '<div class="sh-sec"><div class="sh-sl">Activity Log</div><div id="act-log">'+renderLogs(id)+'</div></div>'+
     '<div class="sh-btns">'+
       '<button class="btn-cal idle-cal" id="bcal" onclick="addCal()">'+I.cal+'<span id="bcaltx"> Calendar</span></button>'+
@@ -1790,6 +1792,8 @@ function openSheet(id){
   ST.selId=id;
   /* Async fetch logs from SharePoint to merge with localStorage */
   if(LOG_LIST_ID)refreshLogsFromSP(id);
+  /* Async fetch attachments from SharePoint */
+  if(SITE_ID&&SCHED_LIST_ID)renderAttachments(id);
 }
 async function refreshLogsFromSP(id){
   var token=await getGraphToken();
@@ -2051,6 +2055,82 @@ function connectList(){
   SITE_ID=null;SCHED_LIST_ID=null;
   showToast('List configured — refreshing…');
   refresh();
+}
+/* ══════════════════════════════════════════
+   ATTACHMENTS — fetch & display from SharePoint
+══════════════════════════════════════════ */
+async function fetchAttachments(itemId){
+  var token=await getGraphToken();
+  if(!token||!SITE_ID||!SCHED_LIST_ID)return[];
+  try{
+    var drRes=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/items/'+itemId+'/driveItem/children?$select=id,name,size,file', {
+      headers:{'Authorization':'Bearer '+token}
+    });
+    if(!drRes.ok){
+      if(drRes.status===404)return[];
+      var dr2=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/items/'+itemId+'/driveItem?$select=id', {
+        headers:{'Authorization':'Bearer '+token}
+      });
+      if(!dr2.ok)return[];
+      return[];
+    }
+    var data=await drRes.json();
+    return (data.value||[]).filter(function(f){return f.file&&f.name;}).map(function(f){
+      return{id:f.id,name:f.name,size:f.size,contentType:f.file&&f.file.mimeType||'',_dlUrl:f['@microsoft.graph.downloadUrl']||(GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/items/'+itemId+'/driveItem/children/'+f.id+'/content')};
+    });
+  }catch(e){return[];}
+}
+async function renderAttachments(id){
+  var el=document.getElementById('attach-list');
+  if(!el)return;
+  var a=acOf(id);
+  if(!a||!a._listItemId){el.innerHTML='<div style="font-size:12px;color:var(--t3);padding:4px 0">No attachments</div>';return;}
+  el.innerHTML='<div style="font-size:12px;color:var(--t3);padding:4px 0">Loading…</div>';
+  var atts=await fetchAttachments(a._listItemId);
+  if(!atts||!atts.length){el.innerHTML='<div style="font-size:12px;color:var(--t3);padding:4px 0">No attachments</div>';return;}
+  if(!ST._atts)ST._atts={};
+  ST._atts[id]=atts;
+  var h='';
+  for(var i=0;i<atts.length;i++){
+    var at=atts[i];
+    var icon=at.contentType&&at.contentType.startsWith('image/')?'🖼':'📄';
+    h+='<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--bd)">'+
+      '<span>'+icon+'</span>'+
+      '<span style="flex:1;color:var(--t1);font-weight:600;font-size:12px">'+escH(at.name)+'</span>'+
+      '<span style="color:var(--t3);font-size:11px">'+fmtSize(at.size)+'</span>'+
+      '<button style="background:rgba(59,130,246,.12);color:var(--bl);border:0;padding:4px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit" onclick="openAttachment(\''+id+'\','+i+')">Open</button></div>';
+  }
+  el.innerHTML=h;
+}
+function fmtSize(b){if(!b||b<=0)return'';if(b<1024)return b+'B';if(b<1048576)return (b/1024).toFixed(1)+'KB';return (b/1048576).toFixed(1)+'MB';}
+async function openAttachment(id,idx){
+  var atts=ST._atts&&ST._atts[id];
+  if(!atts||!atts[idx]){showToast('Attachment not found');return;}
+  var at=atts[idx];
+  var a=acOf(id);
+  if(!a||!a._listItemId){showToast('Activity not found');return;}
+  if(at._dlUrl){
+    window.open(at._dlUrl,'_blank');
+    return;
+  }
+  var token=await getGraphToken();
+  if(!token){showToast('Sign in first');return;}
+  try{
+    var res=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/items/'+a._listItemId+'/driveItem/children/'+at.id+'/content', {
+      headers:{'Authorization':'Bearer '+token}
+    });
+    if(!res.ok){showToast('Failed to open attachment');return;}
+    var blob=await res.blob();
+    var url=URL.createObjectURL(blob);
+    if(blob.type.startsWith('image/')){
+      window.open(url,'_blank');
+    }else{
+      var lnk=document.createElement('a');
+      lnk.href=url;lnk.download=at.name;
+      document.body.appendChild(lnk);lnk.click();
+      setTimeout(function(){document.body.removeChild(lnk);URL.revokeObjectURL(url);},2000);
+    }
+  }catch(e){showToast('Error opening attachment');}
 }
 function disconnectList(){
   try{localStorage.removeItem('maseel_list_ctx');}catch(e){}
