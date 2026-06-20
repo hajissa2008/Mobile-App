@@ -1782,7 +1782,7 @@ function openSheet(id){
       (getPhoto(id)?'<span style="font-size:12px;font-weight:700;color:var(--gr);cursor:pointer;text-decoration:underline" onclick="showPhoto(\''+getPhoto(id)+'\')">photo.jpeg</span>':'')+
     '</div></div>'+
     '<div class="sh-sec"><div class="sh-sl">Attachments</div><div id="attach-list">'+
-      '<div id="att-msg" style="font-size:12px;color:var(--t3);padding:4px 0">---</div></div></div>'+
+      '<div id="att-msg" style="font-size:12px;color:var(--t3);padding:4px 0">⋯</div></div></div>'+
     '<div class="sh-sec"><div class="sh-sl">Activity Log</div><div id="act-log">'+renderLogs(id)+'</div></div>'+
     '<div class="sh-btns">'+
       '<button class="btn-cal idle-cal" id="bcal" onclick="addCal()">'+I.cal+'<span id="bcaltx"> Calendar</span></button>'+
@@ -1793,8 +1793,7 @@ function openSheet(id){
   ST.selId=id;
   /* Async fetch logs from SharePoint to merge with localStorage */
   if(LOG_LIST_ID)refreshLogsFromSP(id);
-  /* Async fetch attachments from SharePoint */
-  if(SITE_ID&&SCHED_LIST_ID)renderAttachments(id);
+  renderAttachments(id);
 }
 async function refreshLogsFromSP(id){
   var token=await getGraphToken();
@@ -2062,26 +2061,28 @@ function connectList(){
 ══════════════════════════════════════════ */
 function renderAttachments(id){
   var el=document.getElementById('attach-list');
-  if(!el)return;
+  if(!el){document.getElementById('att-msg')&&(document.getElementById('att-msg').innerHTML='no el');return;}
   var a=acOf(id);
   var ctx=listCtx();
-  if(!a||!a._listItemId||!ctx||!ctx.siteUrl||!ctx.listName||!a._attachName){
-    el.innerHTML='<div style="font-size:12px;color:var(--t3);padding:4px 0">No attachments</div>';return;
-  }
-  var files=a._attachName.split(/[,;]+/).map(function(x){return x.trim();}).filter(function(x){return x;});
-  if(!files.length){el.innerHTML='<div style="font-size:12px;color:var(--t3);padding:4px 0">No attachments</div>';return;}
+  if(!a){el.innerHTML='<div style="font-size:12px">no activity</div>';return;}
+  if(!a._listItemId){el.innerHTML='<div style="font-size:12px">no _listItemId</div>';return;}
+  if(!ctx){el.innerHTML='<div style="font-size:12px">no ctx</div>';return;}
+  if(!ctx.siteUrl||!ctx.listName){el.innerHTML='<div style="font-size:12px">no ctx site/list</div>';return;}
+  var fn=a._attachName;
+  if(!fn){el.innerHTML='<div style="font-size:12px">no attach field</div>';return;}
+  var files=fn.split(/[,;]+/).map(function(x){return x.trim();}).filter(function(x){return x;});
+  if(!files.length){el.innerHTML='<div style="font-size:12px">empty attach field</div>';return;}
   var baseUrl=ctx.siteUrl+'/Lists/'+encodeURIComponent(ctx.listName)+'/Attachments/'+a._listItemId+'/';
   if(!ST._atts)ST._atts={};
-  ST._atts[id]=files.map(function(fn){return{name:fn,url:baseUrl+encodeURIComponent(fn)};});
+  ST._atts[id]=files.map(function(fn2){return{name:fn2,url:baseUrl+encodeURIComponent(fn2)};});
   var h='';
   for(var i=0;i<files.length;i++){
     var ext=files[i].split('.').pop().toLowerCase();
     var isImg=['jpg','jpeg','png','gif','bmp','webp','svg'].indexOf(ext)>=0;
-    var icon=isImg?'🖼':'📄';
     h+='<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--bd)">'+
-      '<span>'+icon+'</span>'+
+      '<span>'+(isImg?'🖼':'📄')+'</span>'+
       '<span style="flex:1;color:var(--t1);font-weight:600;font-size:12px">'+escH(files[i])+'</span>'+
-      '<span style="color:var(--t3);font-size:11px">(SP)</span>'+
+      '<span style="color:var(--t3);font-size:11px"></span>'+
       '<button style="background:rgba(59,130,246,.12);color:var(--bl);border:0;padding:4px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit" onclick="openAttachment(\''+id+'\','+i+')">Open</button></div>';
   }
   el.innerHTML=h;
