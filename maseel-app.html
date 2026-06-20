@@ -537,6 +537,7 @@ function addIns(id,qty,result){
   saveOverrides();
   ST.syncQ++;updBadge();
   syncAll();addLog(id,'Inspection '+result,'qty: '+qty);
+  var ac2=acOf(id);notifyUser('Inspection: '+result,(ac2?ac2.title:id)+' — '+qty+' '+result);
 }
 function loadPhotos(){try{var d=localStorage.getItem('maseel_photos');return d?JSON.parse(d):{};}catch(e){return {};}}
 function savePhotos(p){try{localStorage.setItem('maseel_photos',JSON.stringify(p));}catch(e){}}
@@ -559,6 +560,27 @@ function getLogs(id){
   return loadLogs().filter(function(l){return l.id===id;}).sort(function(a,b){return a.ts<b.ts?1:a.ts>b.ts?-1:0;});
 }
 function renderLogs(id){return renderLogsFromArray(getLogs(id));}
+
+/* ── Push Notification ── */
+function reqNotif(){try{Notification.requestPermission();}catch(e){}}
+function notifSound(){
+  try{
+    var ctx=new(window.AudioContext||window.webkitAudioContext)();
+    var o=ctx.createOscillator(),g=ctx.createGain();
+    o.type='sine';o.frequency.value=880;g.gain.value=0.15;
+    o.connect(g);g.connect(ctx.destination);
+    o.start();o.stop(ctx.currentTime+0.15);
+    setTimeout(function(){var o2=ctx.createOscillator(),g2=ctx.createGain();o2.type='sine';o2.frequency.value=1100;g2.gain.value=0.1;o2.connect(g2);g2.connect(ctx.destination);o2.start();o2.stop(ctx.currentTime+0.12);},120);
+  }catch(e){}
+}
+function notifyUser(title,body){
+  notifSound();
+  try{
+    if(Notification.permission==='granted'&&document.hidden){var n=new Notification(title,{body:body,icon:'/favicon.ico'});setTimeout(function(){n.close();},5000);}
+  }catch(e){}
+}
+/* Auto-request on first interaction */
+document.addEventListener('click',function _firstNotif(){reqNotif();document.removeEventListener('click',_firstNotif);},{once:true});
 
 /* ══════════════════════════════════════════
    AUTH — Office 365 SSO (MSAL, optional)
@@ -2046,6 +2068,7 @@ async function saveSheet(id){
   if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();
   var a=acOf(id),finalSt=ST.overrides[id].st,finalPc=ST.overrides[id].pc;
   addLog(id,'Saved','Status: '+finalSt+', Progress: '+finalPc+'%'+(notes?', Notes updated':''));
+  notifyUser('Saved: '+finalSt,(a?a.title:id)+' \u2014 '+finalPc+'%');
   if(finalSt==='For Inspection')sendInspectionEmail(id, a?a.title:'');
   else if(finalSt==='Partially Inspected'||finalSt==='Done')sendReadyEmail(id, a?a.title:'');
   await saveToExcel(id, finalSt, finalPc, notes);
@@ -2196,6 +2219,7 @@ function cycSt(id){
   saveOverrides();ST.syncQ++;updBadge();
   if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();else rProfile();
   showToast('→ '+nxt);syncAll();addLog(id,'Status changed','→ '+nxt);
+  var ac=acOf(id);notifyUser('Status Changed: '+nxt,(ac?ac.title:id)+' → '+nxt);
 }
 function setTodayFilter(k){ST.todayFilter=ST.todayFilter===k?'':k;rToday();}
 function dimB(){ST.banner=false;var b=document.getElementById('notif');if(b)b.classList.add('gone');}
