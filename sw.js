@@ -1,4 +1,4 @@
-var CACHE='maseel-v2';
+var CACHE='maseel-v3';
 var CDN='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 self.addEventListener('install',function(e){
   e.waitUntil(

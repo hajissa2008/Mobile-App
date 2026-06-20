@@ -1782,7 +1782,7 @@ function openSheet(id){
       (getPhoto(id)?'<span style="font-size:12px;font-weight:700;color:var(--gr);cursor:pointer;text-decoration:underline" onclick="showPhoto(\''+getPhoto(id)+'\')">photo.jpeg</span>':'')+
     '</div></div>'+
     '<div class="sh-sec"><div class="sh-sl">Attachments</div><div id="attach-list">'+
-      '<div style="font-size:12px;color:var(--t3);padding:4px 0">Loading…</div></div></div>'+
+      '<div id="att-msg" style="font-size:12px;color:var(--t3);padding:4px 0">---</div></div></div>'+
     '<div class="sh-sec"><div class="sh-sl">Activity Log</div><div id="act-log">'+renderLogs(id)+'</div></div>'+
     '<div class="sh-btns">'+
       '<button class="btn-cal idle-cal" id="bcal" onclick="addCal()">'+I.cal+'<span id="bcaltx"> Calendar</span></button>'+
