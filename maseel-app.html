@@ -131,6 +131,7 @@ body{height:100%;overflow:hidden;overscroll-behavior:none;
 .ci-pi{border-color:#F59E0B!important;background:rgba(245,158,11,.15)!important;box-shadow:0 0 6px rgba(245,158,11,.2)}
 .ci-bk{border-color:#EF4444!important;background:rgba(239,68,68,.15)!important;box-shadow:0 0 6px rgba(239,68,68,.2)}
 .ci-fi{border-color:#F87171!important;background:rgba(248,113,113,.15)!important;box-shadow:0 0 6px rgba(248,113,113,.2)}
+.ci-sd{border-color:#8B5CF6!important;background:rgba(139,92,246,.15)!important;box-shadow:0 0 6px rgba(139,92,246,.2)}
 .cinfo{flex:1;min-width:0}
 .ctit{font-family:var(--FD);font-size:15px;font-weight:700;line-height:1.4;word-break:break-word;color:var(--t1)}
 .cdisc{font-size:12px;color:var(--t3);margin-top:4px;font-weight:500;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -141,6 +142,7 @@ body{height:100%;overflow:hidden;overscroll-behavior:none;
 .b-dn{background:rgba(16,185,129,.12);color:#34D399;border:1px solid rgba(16,185,129,.2)}
 .b-fi{background:rgba(248,113,113,.12);color:#F87171;border:1px solid rgba(248,113,113,.2)}
 .b-pi{background:rgba(245,158,11,.12);color:#F59E0B;border:1px solid rgba(245,158,11,.2)}
+.b-sd{background:rgba(139,92,246,.12);color:#A78BFA;border:1px solid rgba(139,92,246,.2)}
 .b-dt{background:rgba(255,255,255,.06);color:var(--t2);border:1px solid rgba(255,255,255,.08)}
 .b-td{background:rgba(245,158,11,.1);color:var(--a);border:1px solid rgba(245,158,11,.2)}
 .b-ov{background:rgba(239,68,68,.1);color:#F87171;border:1px solid rgba(239,68,68,.2);animation:pulse 2s infinite}
@@ -288,6 +290,8 @@ body{height:100%;overflow:hidden;overscroll-behavior:none;
 .sopt.s-dn .so-lbl{color:#34D399}.sopt.s-dn .so-radio{border-color:#10B981}
 .sopt.s-fi .so-lbl{color:#F87171}.sopt.s-fi .so-radio{border-color:#F87171}
 .sopt.s-pi .so-lbl{color:#F59E0B}.sopt.s-pi .so-radio{border-color:#F59E0B}
+.sopt.s-sd{border-color:#8B5CF6;background:rgba(139,92,246,.12)}
+.sopt.s-sd .so-lbl{color:#A78BFA}.sopt.s-sd .so-radio{border-color:#8B5CF6}
 .pct-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
 .pct-num{font-family:var(--FD);font-size:22px;font-weight:900;color:#3B82F6}
 input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:28px;
@@ -531,7 +535,7 @@ function addIns(id,qty,result){
   var a=acOf(id),tot=a?a.totalQty||readyQty(id):0,passed=inspQty(id),att=totalInspQty(id);
   if(tot>0&&att>0){
     ST.overrides[id].pc=Math.round(att/tot*100);
-    if(passed>=tot){ST.overrides[id].st='Done';showToast('✓ All quantity passed — status set to Done');}
+    if(passed>=tot){ST.overrides[id].st='ACC Done';showToast('✓ All quantity passed — status set to ACC Done');}
     else{ST.overrides[id].st='Partially Inspected';showToast('! Partially inspected — status updated');}
   }
   saveOverrides();
@@ -1312,7 +1316,7 @@ function phOf(id){for(var i=0;i<PH.length;i++)if(PH[i].id===id)return PH[i];retu
 function detectPhaseFromId(id,title){var m=id.match(/P([1-5])(?:\(\d+\))?/i);if(m)return'Phase '+m[1];if(title){var n=title.match(/ph0?([1-5])/i);if(n)return'Phase '+n[1];}return'Unassigned';}
 function calcDur(a){if(!a.s||!a.f)return 0;return Math.max(0,Math.round((new Date(a.f)-new Date(a.s))/(86400000)));}
 function acOf(id){for(var i=0;i<AC.length;i++)if(AC[i].id===id)return AC[i];return null;}
-function sk(s){return s==='Not Started'?'ns':s==='In Progress'?'ip':s==='Done'?'dn':s==='Partially Inspected'?'pi':'fi';}
+function sk(s){return s==='Not Started'?'ns':s==='In Progress'?'ip':s==='ACC Done'?'dn':s==='SDC Done'?'sd':s==='Partially Inspected'?'pi':'fi';}
 function eff(a){return(ST.overrides[a.id]||{});}
 function effSt(a){return eff(a).st||a.st;}
 function effPc(a){
@@ -1349,8 +1353,8 @@ var I={
 function stB(s){var k=sk(s);return'<span class="b b-'+k+'">'+s+'</span>';}
 function dtB(d){if(!d)return'';if(d===DATA_DATE)return'<span class="b b-td">Due Today</span>';if(d<DATA_DATE)return'<span class="b b-ov">Overdue</span>';return'<span class="b b-dt">'+fd(d)+'</span>';}
 function flB(f){if(f==null)return'';if(f<0)return'<span class="b b-ov">Overdue</span>';var c=f<5?'b-td':'b-c';return'<span class="b '+c+'">Float '+f+'d</span>';}
-function qtyB(a){var ins=inspQty(a.id),rq=readyQty(a.id),rm=remQty(a.id);if(!rq&&!a.totalQty)return'';var u=a.unit?' '+a.unit:'';var t=a.totalQty?'/'+a.totalQty+u:u;return'<span class="b b-c">'+ins+t+' ready:'+rq+'</span>'+((rm>0&&ins>0)?'<span class="b b-td">'+rm+' left</span>':(rm<=0&&ins>0?'<span class="b b-dn" style="background:rgba(16,185,129,.15);color:var(--gr)">✓ Done</span>':''));}
-function circInner(s){if(s==='Done')return I.chkW;if(s==='In Progress')return I.dot7;return'';}
+function qtyB(a){var ins=inspQty(a.id),rq=readyQty(a.id),rm=remQty(a.id);if(!rq&&!a.totalQty)return'';var u=a.unit?' '+a.unit:'';var t=a.totalQty?'/'+a.totalQty+u:u;return'<span class="b b-c">'+ins+t+' ready:'+rq+'</span>'+((rm>0&&ins>0)?'<span class="b b-td">'+rm+' left</span>':(rm<=0&&ins>0?'<span class="b b-dn" style="background:rgba(16,185,129,.15);color:var(--gr)">✓ Complete</span>':''));}
+function circInner(s){if(s==='ACC Done'||s==='SDC Done')return I.chkW;if(s==='In Progress')return I.dot7;return'';}
 function escH(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 /* ── Permission filtering ── */
@@ -1426,16 +1430,17 @@ function rToday(){
   for(var i=0;i<vAC.length;i++){
     var a=vAC[i];var st=effSt(a);
     var isActive=(!a.s||a.s<=DATA_DATE)&&(!a.f||a.f>=DATA_DATE);
-    var isOverdue=a.f&&a.f<DATA_DATE&&st!=='Done';
+    var isOverdue=a.f&&a.f<DATA_DATE&&st!=='ACC Done'&&st!=='SDC Done';
     if(tf){
       if(tf==='Not Started'&&st!=='Not Started')continue;
       else if(tf==='Overdue'&&!isOverdue)continue;
       else if(tf==='In Progress'&&st!=='In Progress')continue;
       else if(tf==='For Inspection'&&st!=='For Inspection')continue;
       else if(tf==='Partially Inspected'&&st!=='Partially Inspected')continue;
-      else if(tf==='Done'&&st!=='Done')continue;
+      else if(tf==='ACC Done'&&st!=='ACC Done')continue;
+      else if(tf==='SDC Done'&&st!=='SDC Done')continue;
     }else{
-      if(st==='Done')continue;
+      if(st==='ACC Done'||st==='SDC Done')continue;
       if(!isActive)continue;
     }
     if(!q||a.title.toLowerCase().indexOf(q)>-1||a.id.toLowerCase().indexOf(q)>-1||(a.disc||'').toLowerCase().indexOf(q)>-1)
@@ -1461,21 +1466,23 @@ function rToday(){
       '<button class="n-x" onclick="event.stopPropagation();dimB()">'+I.x+'</button></div>';
   }
   /* KPI counts from all visible activities (by status, regardless of date range) */
-  var kNs=0,kOv=0,kIp=0,kFi=0,kPi=0,kDn=0;
-  for(var i=0;i<vAC.length;i++){var a=vAC[i],s=effSt(a),isOverdue=a.f&&a.f<DATA_DATE&&s!=='Done';
+  var kNs=0,kOv=0,kIp=0,kFi=0,kPi=0,kAc=0,kSd=0;
+  for(var i=0;i<vAC.length;i++){var a=vAC[i],s=effSt(a),isOverdue=a.f&&a.f<DATA_DATE&&s!=='ACC Done'&&s!=='SDC Done';
     if(s==='Not Started')kNs++;
     if(isOverdue)kOv++;
     if(s==='In Progress')kIp++;
     if(s==='For Inspection')kFi++;
     if(s==='Partially Inspected')kPi++;
-    if(s==='Done')kDn++;}
+    if(s==='ACC Done')kAc++;
+    if(s==='SDC Done')kSd++;}
   var kpis=[
     {k:'Not Started',c:'#9CA3AF',v:kNs},
     {k:'Overdue',c:'#EF4444',v:kOv},
     {k:'In Progress',c:'#60A5FA',v:kIp},
     {k:'For Inspection',c:'#F87171',v:kFi},
     {k:'Partially Inspected',c:'#F59E0B',v:kPi},
-    {k:'Done',c:'#34D399',v:kDn}
+    {k:'ACC Done',c:'#34D399',v:kAc},
+    {k:'SDC Done',c:'#A78BFA',v:kSd}
   ];
   h+='<div class="kpis">';
   for(var ki=0;ki<kpis.length;ki++){
@@ -1512,7 +1519,7 @@ function rToday(){
 
 function buildCard(a){
   var st=effSt(a),pc=effPc(a),k=sk(st),dp=detectPhaseFromId(a.id,a.title),c=COL[dp]||'#8B9BB4';
-  return'<div class="card'+(st==='Done'?' fade-c':'')+'" onclick="openSheet(\''+a.id+'\')" style="border-left:none">'+
+  return'<div class="card'+(st==='ACC Done'||st==='SDC Done'?' fade-c':'')+'" onclick="openSheet(\''+a.id+'\')" style="border-left:none">'+
     '<div class="stripe" style="background:'+c+'"></div>'+
     '<div class="crow">'+
       '<div class="circ ci-'+k+'" style="border-color:'+(k==='dn'?'#10B981':k==='pi'?'#F59E0B':k==='ip'?'#3B82F6':k==='fi'?'#F87171':'rgba(255,255,255,.13)')+'" onclick="event.stopPropagation();cycSt(\''+a.id+'\')">'+circInner(st)+'</div>'+
@@ -1571,12 +1578,12 @@ function rTimeline(){
   var phMap={},phActs={};
   for(var i=0;i<vAC.length;i++){
     var a=vAC[i],p=detectPhaseFromId(a.id,a.title),st=effSt(a);
-    if(!showDone&&st==='Done')continue;
+    if(!showDone&&(st==='ACC Done'||st==='SDC Done'))continue;
     if(q&&a.title.toLowerCase().indexOf(q)===-1&&a.id.toLowerCase().indexOf(q)===-1&&(a.disc||'').toLowerCase().indexOf(q)===-1)continue;
     if(!inDateRange(a))continue;
     if(!phActs[p]){phActs[p]=[];phMap[p]={done:0,total:0};}
     phActs[p].push(a);phMap[p].total++;
-    if(st==='Done')phMap[p].done++;
+    if(st==='ACC Done'||st==='SDC Done')phMap[p].done++;
   }
 
   var phOrder=Object.keys(phActs).sort(function(a,b){
@@ -1610,7 +1617,7 @@ function rTimeline(){
 function rProfile(){
   var vAC=visibleAC();
   var done=0,ip=0,ns=0;
-  for(var i=0;i<vAC.length;i++){var s=effSt(vAC[i]);if(s==='Done')done++;else if(s==='In Progress')ip++;else ns++;}
+  for(var i=0;i<vAC.length;i++){var s=effSt(vAC[i]);if(s==='ACC Done'||s==='SDC Done')done++;else if(s==='In Progress')ip++;else ns++;}
   var pct=vAC.length?Math.round(100*done/vAC.length):0;
 
   /* data source card */
@@ -1932,7 +1939,7 @@ function updateReadyQty(id){
   var a=acOf(id),cur=effSt(a),tot=a?a.totalQty||readyQty(id):0,passed=inspQty(id),att=totalInspQty(id);
   if(cur!=='For Inspection'&&tot>0&&att>0){
     ST.overrides[id].pc=Math.round(att/tot*100);
-    if(passed>=tot){ST.overrides[id].st='Done';ST.overrides[id].pc=100;showToast('✓ All quantity passed — status set to Done');}
+    if(passed>=tot){ST.overrides[id].st='ACC Done';ST.overrides[id].pc=100;showToast('✓ All quantity passed — status set to ACC Done');}
     else{ST.overrides[id].st='Partially Inspected';showToast('! Partially inspected — status updated');}
     saveOverrides();
   }else{showToast('✓ Ready quantity set to '+v);}
@@ -2226,12 +2233,12 @@ function go(t){
   document.getElementById('s-'+t).classList.add('active');
   if(t==='today')rToday();else if(t==='timeline')rTimeline();else rProfile();
 }
-var CYCLE=['Not Started','In Progress','For Inspection','Partially Inspected','Done'];
+var CYCLE=['Not Started','In Progress','For Inspection','Partially Inspected','ACC Done','SDC Done'];
 function cycSt(id){
   var a=acOf(id);if(!a)return;
   var cur=effSt(a),nxt=CYCLE[(CYCLE.indexOf(cur)+1)%CYCLE.length];
   if(!ST.overrides[id])ST.overrides[id]={};
-  ST.overrides[id].st=nxt;ST.overrides[id].pc=nxt==='Done'?100:nxt==='Not Started'?0:50;
+  ST.overrides[id].st=nxt;ST.overrides[id].pc=nxt==='ACC Done'||nxt==='SDC Done'?100:nxt==='Not Started'?0:50;
   saveOverrides();ST.syncQ++;updBadge();
   if(ST.tab==='today')rToday();else if(ST.tab==='timeline')rTimeline();else rProfile();
   showToast('→ '+nxt);syncAll();addLog(id,'Status changed','→ '+nxt);
