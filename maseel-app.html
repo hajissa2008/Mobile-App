@@ -1547,9 +1547,9 @@ function rTimeline(){
       '" oninput="ST.searchQ=this.value;rTimeline()" autocomplete="off" autocorrect="off" spellcheck="false">'+
     '</div></div>'+
     '<div style="display:flex;gap:6px;padding:0 20px 8px;align-items:center">'+
-      '<input type="date" value="'+ST.filterFrom+'" onchange="ST.filterFrom=this.value;rTimeline()" style="flex:1;padding:5px 8px;border:1px solid var(--bd);border-radius:6px;font-size:11px;background:var(--bg1);color:var(--t1);font-family:inherit">'+
+      '<input type="date" value="'+ST.filterFrom+'" onfocus="this.showPicker()" onchange="ST.filterFrom=this.value;rTimeline()" style="flex:1;padding:5px 8px;border:1px solid var(--bd);border-radius:6px;font-size:11px;background:var(--bg1);color:var(--t1);font-family:inherit">'+
       '<span style="color:var(--t3);font-size:10px">→</span>'+
-      '<input type="date" value="'+ST.filterTo+'" onchange="ST.filterTo=this.value;rTimeline()" style="flex:1;padding:5px 8px;border:1px solid var(--bd);border-radius:6px;font-size:11px;background:var(--bg1);color:var(--t1);font-family:inherit">'+
+      '<input type="date" value="'+ST.filterTo+'" onfocus="this.showPicker()" onchange="ST.filterTo=this.value;rTimeline()" style="flex:1;padding:5px 8px;border:1px solid var(--bd);border-radius:6px;font-size:11px;background:var(--bg1);color:var(--t1);font-family:inherit">'+
       (ST.filterFrom||ST.filterTo?'<span style="font-size:10px;color:var(--a);cursor:pointer" onclick="ST.filterFrom=\'\';ST.filterTo=\'\';rTimeline()">✕</span>':'')+
     '</div>'+
     '<div class="ovr" onclick="toggleShowDone()" style="cursor:pointer;transition:opacity .2s">'+
