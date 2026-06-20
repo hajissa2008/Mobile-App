@@ -2063,22 +2063,39 @@ async function fetchAttachments(itemId){
   var token=await getGraphToken();
   if(!token||!SITE_ID||!SCHED_LIST_ID)return[];
   try{
-    var drRes=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/items/'+itemId+'/driveItem/children?$select=id,name,size,file', {
+    /* Method 1: expand driveItem to get folder, then list children */
+    var itRes=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/items/'+itemId+'?expand=driveItem&$select=id', {
       headers:{'Authorization':'Bearer '+token}
     });
-    if(!drRes.ok){
-      if(drRes.status===404)return[];
-      var dr2=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/items/'+itemId+'/driveItem?$select=id', {
-        headers:{'Authorization':'Bearer '+token}
-      });
-      if(!dr2.ok)return[];
-      return[];
+    if(itRes.ok){
+      var itData=await itRes.json();
+      if(itData.driveItem&&itData.driveItem.id){
+        var folderId=itData.driveItem.id;
+        var chRes=await fetch(GRAPH_SITES_BASE+SITE_ID+'/drive/items/'+folderId+'/children', {
+          headers:{'Authorization':'Bearer '+token}
+        });
+        if(chRes.ok){
+          var chData=await chRes.json();
+          var files=(chData.value||[]).filter(function(f){return f.file&&f.name;}).map(function(f){
+            return{id:f.id,name:f.name,size:f.size,contentType:(f.file&&f.file.mimeType)||'',_dlUrl:f['@microsoft.graph.downloadUrl']||'',webUrl:f.webUrl||''};
+          });
+          if(files.length)return files;
+        }
+      }
     }
-    var data=await drRes.json();
-    return (data.value||[]).filter(function(f){return f.file&&f.name;}).map(function(f){
-      return{id:f.id,name:f.name,size:f.size,contentType:f.file&&f.file.mimeType||'',_dlUrl:f['@microsoft.graph.downloadUrl']||(GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/items/'+itemId+'/driveItem/children/'+f.id+'/content')};
+    /* Method 2: direct driveItem/children (works for some list configs) */
+    var dcRes=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/items/'+itemId+'/driveItem/children', {
+      headers:{'Authorization':'Bearer '+token}
     });
-  }catch(e){return[];}
+    if(dcRes.ok){
+      var dcData=await dcRes.json();
+      var files2=(dcData.value||[]).filter(function(f){return f.file&&f.name;}).map(function(f){
+        return{id:f.id,name:f.name,size:f.size,contentType:(f.file&&f.file.mimeType)||'',_dlUrl:f['@microsoft.graph.downloadUrl']||'',webUrl:f.webUrl||''};
+      });
+      if(files2.length)return files2;
+    }
+    return[];
+  }catch(e){console.log('[att] error:',e);return[];}
 }
 async function renderAttachments(id){
   var el=document.getElementById('attach-list');
@@ -2107,16 +2124,21 @@ async function openAttachment(id,idx){
   var atts=ST._atts&&ST._atts[id];
   if(!atts||!atts[idx]){showToast('Attachment not found');return;}
   var at=atts[idx];
-  var a=acOf(id);
-  if(!a||!a._listItemId){showToast('Activity not found');return;}
+  /* Prefer pre-authenticated download URL */
   if(at._dlUrl){
     window.open(at._dlUrl,'_blank');
     return;
   }
+  /* Fallback: web URL opens in SharePoint if user is logged in */
+  if(at.webUrl){
+    window.open(at.webUrl,'_blank');
+    return;
+  }
+  /* Last resort: download via Graph API */
   var token=await getGraphToken();
   if(!token){showToast('Sign in first');return;}
   try{
-    var res=await fetch(GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/items/'+a._listItemId+'/driveItem/children/'+at.id+'/content', {
+    var res=await fetch(GRAPH_SITES_BASE+SITE_ID+'/drive/items/'+at.id+'/content', {
       headers:{'Authorization':'Bearer '+token}
     });
     if(!res.ok){showToast('Failed to open attachment');return;}
