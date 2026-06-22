@@ -2065,64 +2065,57 @@ async function loadAttachmentsAsync(id){
   var el=document.getElementById(sid);
   if(!el)return;
   el.innerHTML='<div class="sh-sec"><div class="sh-sl">Attachments</div><div style="font-size:12px;font-weight:600;color:var(--t3);padding:8px 0">\u21bb Loading\u2026</div></div>';
-  var a=acOf(id);
-  if(!a||!a._listItemId||!SITE_ID||!SCHED_LIST_ID){el.innerHTML='';return;}
-  var ctx=listCtx();
-  if(!ctx||!ctx.siteUrl){el.innerHTML='';return;}
-  var files=null;
-  /* Helper: fetch with timeout */
-  function tFetch(url,opt,ms){return new Promise(function(rr){var c=new AbortController();var t=setTimeout(function(){c.abort();rr(null);},ms||8000);fetch(url,Object.assign({signal:c.signal},opt||{})).then(function(x){clearTimeout(t);rr(x);}).catch(function(){clearTimeout(t);rr(null);});});}
-  /* Try 1: Graph API — list drive Attachments folder (uses Graph token) */
-  var token=await getGraphToken();
-  if(token){
-    try{
-      var u1=GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/drive/root:/Attachments/'+a._listItemId+':/children?$select=name,webUrl,size';
-      var r1=await tFetch(u1,{headers:{'Authorization':'Bearer '+token}});
-      if(r1&&r1.ok){var d1=await r1.json();if(d1.value&&d1.value.length)files=d1.value;}
-    }catch(e){}
-  }
-  /* Try 2: SharePoint REST API with SharePoint-scoped token */
-  if(!files){
-    try{
+  /* Safety net: clear loading after 18s no matter what */
+  var safeTimer=setTimeout(function(){var e2=document.getElementById(sid);if(e2)e2.innerHTML='';},18000);
+  try{
+    var a=acOf(id);
+    if(!a||!a._listItemId||!SITE_ID||!SCHED_LIST_ID){clearTimeout(safeTimer);el.innerHTML='';return;}
+    var ctx=listCtx();
+    if(!ctx||!ctx.siteUrl){clearTimeout(safeTimer);el.innerHTML='';return;}
+    var files=null;
+    /* Helper: fetch + json with timeout */
+    function tFetchJson(url,opt,ms){return new Promise(function(rr){var c=new AbortController();var t=setTimeout(function(){c.abort();rr(null);},ms||8000);fetch(url,Object.assign({signal:c.signal},opt||{})).then(function(x){clearTimeout(t);if(x&&x.ok)x.json().then(rr).catch(function(){rr(null);});else rr(null);}).catch(function(){clearTimeout(t);rr(null);});});}
+    /* Try 1: Graph API — list drive Attachments folder (uses Graph token) */
+    var token=await getGraphToken();
+    if(token&&!files){
+      var d1=await tFetchJson(GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/drive/root:/Attachments/'+a._listItemId+':/children?$select=name,webUrl,size',{headers:{'Authorization':'Bearer '+token}});
+      if(d1&&d1.value&&d1.value.length)files=d1.value;
+    }
+    /* Try 2: SharePoint REST API with SharePoint-scoped token */
+    if(!files&&AUTH.instance&&AUTH.user){
       var spToken=null;
-      if(AUTH.instance&&AUTH.user){
-        var spR=await AUTH.instance.acquireTokenSilent({scopes:[ctx.siteUrl+'/.default'],account:AUTH.user}).catch(function(){return null;});
-        if(spR)spToken=spR.accessToken;
-      }
+      try{
+        var spR=await Promise.race([AUTH.instance.acquireTokenSilent({scopes:[ctx.siteUrl+'/.default'],account:AUTH.user}),new Promise(function(_,rj){setTimeout(function(){rj('timeout');},6000);})]);
+        if(spR&&spR.accessToken)spToken=spR.accessToken;
+      }catch(msalErr){spToken=null;}
       if(spToken){
-        var listNameEnc=encodeURIComponent(ctx.listName).replace(/'/g,"''");
         var origin=siteOrigin(ctx.siteUrl);
-        var spUrl=origin+'/_api/web/lists/getbytitle(\''+listNameEnc+'\')/items('+a._listItemId+')/AttachmentFiles';
-        var spRes=await tFetch(spUrl,{headers:{'Authorization':'Bearer '+spToken,'Accept':'application/json'}});
-        if(spRes&&spRes.ok){
-          var spData=await spRes.json();
-          var spFiles=spData.d?spData.d.results:(spData.value||[]);
-          if(spFiles.length){
-            files=spFiles.map(function(f){return{name:f.FileName||f.name||'',webUrl:origin+(f.ServerRelativeUrl||''),size:f.Length||f.size||0};});
-          }
+        var spD=await tFetchJson(origin+'/_api/web/lists/getbytitle(\''+encodeURIComponent(ctx.listName).replace(/'/g,"''")+'\')/items('+a._listItemId+')/AttachmentFiles',{headers:{'Authorization':'Bearer '+spToken,'Accept':'application/json'}});
+        if(spD){
+          var spFiles=spD.d?spD.d.results:(spD.value||[]);
+          if(spFiles.length)files=spFiles.map(function(f){return{name:f.FileName||f.name||'',webUrl:origin+(f.ServerRelativeUrl||''),size:f.Length||f.size||0};});
         }
       }
-    }catch(e){}
-  }
-  /* Try 3: Fallback to _attachName field value */
-  if(!files){
-    var _fn=a._attachName||'';
-    var _fl=_fn.split(/[,;]+/).map(function(x){return x.trim();}).filter(function(x){return x;});
-    if(_fl.length){
-      files=_fl.map(function(fn){return{name:fn,webUrl:ctx.siteUrl+'/Lists/'+encodeURIComponent(ctx.listName)+'/Attachments/'+a._listItemId+'/'+encodeURIComponent(fn),size:0};});
     }
-  }
-  if(!files||!files.length){el.innerHTML='';return;}
-  if(!ST._atts)ST._atts={};
-  ST._atts[id]=files.map(function(f){return{name:f.name,url:f.webUrl};});
-  var h='<div class="sh-sec"><div class="sh-sl">Attachments</div>';
-  for(var i=0;i<files.length;i++){
-    var ext=files[i].name.split('.').pop().toLowerCase();
-    var isImg=['jpg','jpeg','png','gif','bmp','webp','svg'].indexOf(ext)>=0;
-    h+='<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--bd)"><span>'+(isImg?'\ud83d\uddbc':'\ud83d\udcc4')+'</span><span style="flex:1;color:var(--t1);font-weight:600;font-size:12px">'+escH(files[i].name)+'</span><button style="background:rgba(59,130,246,.12);color:var(--bl);border:0;padding:4px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit" onclick="openAtt(\''+id.replace(/'/g,"\\'")+'\','+i+')">Open</button></div>';
-  }
-  h+='</div>';
-  el.innerHTML=h;
+    /* Try 3: Fallback to _attachName field value */
+    if(!files){
+      var _fn=a._attachName||'';
+      var _fl=_fn.split(/[,;]+/).map(function(x){return x.trim();}).filter(function(x){return x;});
+      if(_fl.length)files=_fl.map(function(fn){return{name:fn,webUrl:ctx.siteUrl+'/Lists/'+encodeURIComponent(ctx.listName)+'/Attachments/'+a._listItemId+'/'+encodeURIComponent(fn),size:0};});
+    }
+    clearTimeout(safeTimer);
+    if(!files||!files.length){el.innerHTML='';return;}
+    if(!ST._atts)ST._atts={};
+    ST._atts[id]=files.map(function(f){return{name:f.name,url:f.webUrl};});
+    var h='<div class="sh-sec"><div class="sh-sl">Attachments</div>';
+    for(var i=0;i<files.length;i++){
+      var ext=files[i].name.split('.').pop().toLowerCase();
+      var isImg=['jpg','jpeg','png','gif','bmp','webp','svg'].indexOf(ext)>=0;
+      h+='<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--bd)"><span>'+(isImg?'\ud83d\uddbc':'\ud83d\udcc4')+'</span><span style="flex:1;color:var(--t1);font-weight:600;font-size:12px">'+escH(files[i].name)+'</span><button style="background:rgba(59,130,246,.12);color:var(--bl);border:0;padding:4px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit" onclick="openAtt(\''+id.replace(/'/g,"\\'")+'\','+i+')">Open</button></div>';
+    }
+    h+='</div>';
+    el.innerHTML=h;
+  }catch(e){clearTimeout(safeTimer);el.innerHTML='';}
 }
 function disconnectList(){
   try{localStorage.removeItem('maseel_list_ctx');}catch(e){}
