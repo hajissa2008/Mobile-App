@@ -1781,8 +1781,7 @@ function openSheet(id){
       '<button class="ph-btn" onclick="attachPhoto()">📷 Photo</button>'+
       (getPhoto(id)?'<span style="font-size:12px;font-weight:700;color:var(--gr);cursor:pointer;text-decoration:underline" onclick="showPhoto(\''+getPhoto(id)+'\')">photo.jpeg</span>':'')+
     '</div></div>'+
-    (function(){try{var _a=acOf(id);var _ctx=listCtx();var _fn=_a&&_a._attachName||'';var _fl=_fn.split(/[,;]+/).map(function(x){return x.trim();}).filter(function(x){return x;});if(!_a||!_a._listItemId||!_ctx||!_ctx.siteUrl||!_ctx.listName||!_fl.length)return'';var _bu=_ctx.siteUrl+'/Lists/'+encodeURIComponent(_ctx.listName)+'/Attachments/'+_a._listItemId+'/';if(!ST._atts)ST._atts={};ST._atts[id]=_fl.map(function(fn2){return{name:fn2,url:_bu+encodeURIComponent(fn2)};});var _h='<div class="sh-sec"><div class="sh-sl">Attachments</div>';for(var _i=0;_i<_fl.length;_i++){var _e=_fl[_i].split('.').pop().toLowerCase();var _ii=['jpg','jpeg','png','gif','bmp','webp','svg'].indexOf(_e)>=0;_h+='<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--bd)"><span>'+
-      (_ii?'🖼':'📄')+'</span><span style="flex:1;color:var(--t1);font-weight:600;font-size:12px">'+escH(_fl[_i])+'</span><button style="background:rgba(59,130,246,.12);color:var(--bl);border:0;padding:4px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit" onclick="openAtt(\''+id.replace(/'/g,"\\'")+'\','+_i+')">Open</button></div>';}_h+='</div>';return _h;}catch(e){return'';}})()+
+    '<div id="att-sec-'+id.replace(/[^a-zA-Z0-9_-]/g,'_')+'"></div>'+
     '<div class="sh-sec"><div class="sh-sl">Activity Log</div><div id="act-log">'+renderLogs(id)+'</div></div>'+
     '<div class="sh-btns">'+
       '<button class="btn-cal idle-cal" id="bcal" onclick="addCal()">'+I.cal+'<span id="bcaltx"> Calendar</span></button>'+
@@ -1793,6 +1792,7 @@ function openSheet(id){
   ST.selId=id;
   /* Async fetch logs from SharePoint to merge with localStorage */
   if(LOG_LIST_ID)refreshLogsFromSP(id);
+  loadAttachmentsAsync(id);
 }
 async function refreshLogsFromSP(id){
   var token=await getGraphToken();
@@ -2058,6 +2058,66 @@ function connectList(){
 function openAtt(id,idx){
   var ats=ST._atts&&ST._atts[id];
   if(ats&&ats[idx])window.open(ats[idx].url,'_blank');
+}
+function siteOrigin(url){try{return new URL(url).origin;}catch(e){return url;}}
+async function loadAttachmentsAsync(id){
+  var sid='att-sec-'+id.replace(/[^a-zA-Z0-9_-]/g,'_');
+  var el=document.getElementById(sid);
+  if(!el)return;
+  el.innerHTML='<div class="sh-sec"><div class="sh-sl">Attachments</div><div style="font-size:12px;font-weight:600;color:var(--t3);padding:8px 0">\u21bb Loading\u2026</div></div>';
+  var a=acOf(id);
+  if(!a||!a._listItemId||!SITE_ID||!SCHED_LIST_ID){el.innerHTML='';return;}
+  var token=await getGraphToken();
+  if(!token){el.innerHTML='';return;}
+  var ctx=listCtx();
+  if(!ctx||!ctx.siteUrl){el.innerHTML='';return;}
+  var files=null;
+  try{
+    var u1=GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/drive/root:/Attachments/'+a._listItemId+':/children?$select=name,webUrl,size';
+    var r1=await fetch(u1,{headers:{'Authorization':'Bearer '+token}});
+    if(r1.ok){var d1=await r1.json();if(d1.value&&d1.value.length)files=d1.value;}
+  }catch(e){}
+  if(!files){
+    try{
+      var u2=GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/items/'+a._listItemId+'/driveItem/children?$select=name,webUrl,size';
+      var r2=await fetch(u2,{headers:{'Authorization':'Bearer '+token}});
+      if(r2.ok){var d2=await r2.json();if(d2.value&&d2.value.length)files=d2.value;}
+    }catch(e){}
+  }
+  if(!files){
+    try{
+      var origin=siteOrigin(ctx.siteUrl);
+      var listNameEnc=encodeURIComponent(ctx.listName).replace(/'/g,"''");
+      var spUrl=origin+'/_api/web/lists/getbytitle(\''+listNameEnc+'\')/items('+a._listItemId+')/AttachmentFiles';
+      var spRes=await fetch(spUrl,{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'}});
+      if(spRes.ok){
+        var spData=await spRes.json();
+        var spFiles=spData.d?spData.d.results:(spData.value||[]);
+        if(spFiles.length){
+          files=spFiles.map(function(f){return{name:f.FileName||f.name||'',webUrl:origin+(f.ServerRelativeUrl||''),size:f.Length||f.size||0};});
+        }
+      }
+    }catch(e){}
+  }
+  if(!files){
+    var _fn=a._attachName||'';
+    var _fl=_fn.split(/[,;]+/).map(function(x){return x.trim();}).filter(function(x){return x;});
+    if(_fl.length){
+      var origin=siteOrigin(ctx.siteUrl);
+      files=_fl.map(function(fn){return{name:fn,webUrl:ctx.siteUrl+'/Lists/'+encodeURIComponent(ctx.listName)+'/Attachments/'+a._listItemId+'/'+encodeURIComponent(fn),size:0};});
+    }
+  }
+  if(!files||!files.length){el.innerHTML='';return;}
+  if(!ST._atts)ST._atts={};
+  ST._atts[id]=files.map(function(f){return{name:f.name,url:f.webUrl};});
+  var h='<div class="sh-sec"><div class="sh-sl">Attachments</div>';
+  for(var i=0;i<files.length;i++){
+    var ext=files[i].name.split('.').pop().toLowerCase();
+    var isImg=['jpg','jpeg','png','gif','bmp','webp','svg'].indexOf(ext)>=0;
+    h+='<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--bd)"><span>'+(isImg?'\ud83d\uddbc':'\ud83d\udcc4')+'</span><span style="flex:1;color:var(--t1);font-weight:600;font-size:12px">'+escH(files[i].name)+'</span><button style="background:rgba(59,130,246,.12);color:var(--bl);border:0;padding:4px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit" onclick="openAtt(\''+id.replace(/'/g,"\\'")+'\','+i+')">Open</button></div>';
+  }
+  h+='</div>';
+  el.innerHTML=h;
 }
 function disconnectList(){
   try{localStorage.removeItem('maseel_list_ctx');}catch(e){}
