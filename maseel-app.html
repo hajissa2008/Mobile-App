@@ -2067,43 +2067,48 @@ async function loadAttachmentsAsync(id){
   el.innerHTML='<div class="sh-sec"><div class="sh-sl">Attachments</div><div style="font-size:12px;font-weight:600;color:var(--t3);padding:8px 0">\u21bb Loading\u2026</div></div>';
   var a=acOf(id);
   if(!a||!a._listItemId||!SITE_ID||!SCHED_LIST_ID){el.innerHTML='';return;}
-  var token=await getGraphToken();
-  if(!token){el.innerHTML='';return;}
   var ctx=listCtx();
   if(!ctx||!ctx.siteUrl){el.innerHTML='';return;}
   var files=null;
-  try{
-    var u1=GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/drive/root:/Attachments/'+a._listItemId+':/children?$select=name,webUrl,size';
-    var r1=await fetch(u1,{headers:{'Authorization':'Bearer '+token}});
-    if(r1.ok){var d1=await r1.json();if(d1.value&&d1.value.length)files=d1.value;}
-  }catch(e){}
-  if(!files){
+  /* Helper: fetch with timeout */
+  function tFetch(url,opt,ms){return new Promise(function(rr){var c=new AbortController();var t=setTimeout(function(){c.abort();rr(null);},ms||8000);fetch(url,Object.assign({signal:c.signal},opt||{})).then(function(x){clearTimeout(t);rr(x);}).catch(function(){clearTimeout(t);rr(null);});});}
+  /* Try 1: Graph API — list drive Attachments folder (uses Graph token) */
+  var token=await getGraphToken();
+  if(token){
     try{
-      var u2=GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/items/'+a._listItemId+'/driveItem/children?$select=name,webUrl,size';
-      var r2=await fetch(u2,{headers:{'Authorization':'Bearer '+token}});
-      if(r2.ok){var d2=await r2.json();if(d2.value&&d2.value.length)files=d2.value;}
+      var u1=GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/drive/root:/Attachments/'+a._listItemId+':/children?$select=name,webUrl,size';
+      var r1=await tFetch(u1,{headers:{'Authorization':'Bearer '+token}});
+      if(r1&&r1.ok){var d1=await r1.json();if(d1.value&&d1.value.length)files=d1.value;}
     }catch(e){}
   }
+  /* Try 2: SharePoint REST API with SharePoint-scoped token */
   if(!files){
     try{
-      var origin=siteOrigin(ctx.siteUrl);
-      var listNameEnc=encodeURIComponent(ctx.listName).replace(/'/g,"''");
-      var spUrl=origin+'/_api/web/lists/getbytitle(\''+listNameEnc+'\')/items('+a._listItemId+')/AttachmentFiles';
-      var spRes=await fetch(spUrl,{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'}});
-      if(spRes.ok){
-        var spData=await spRes.json();
-        var spFiles=spData.d?spData.d.results:(spData.value||[]);
-        if(spFiles.length){
-          files=spFiles.map(function(f){return{name:f.FileName||f.name||'',webUrl:origin+(f.ServerRelativeUrl||''),size:f.Length||f.size||0};});
+      var spToken=null;
+      if(AUTH.instance&&AUTH.user){
+        var spR=await AUTH.instance.acquireTokenSilent({scopes:[ctx.siteUrl+'/.default'],account:AUTH.user}).catch(function(){return null;});
+        if(spR)spToken=spR.accessToken;
+      }
+      if(spToken){
+        var listNameEnc=encodeURIComponent(ctx.listName).replace(/'/g,"''");
+        var origin=siteOrigin(ctx.siteUrl);
+        var spUrl=origin+'/_api/web/lists/getbytitle(\''+listNameEnc+'\')/items('+a._listItemId+')/AttachmentFiles';
+        var spRes=await tFetch(spUrl,{headers:{'Authorization':'Bearer '+spToken,'Accept':'application/json'}});
+        if(spRes&&spRes.ok){
+          var spData=await spRes.json();
+          var spFiles=spData.d?spData.d.results:(spData.value||[]);
+          if(spFiles.length){
+            files=spFiles.map(function(f){return{name:f.FileName||f.name||'',webUrl:origin+(f.ServerRelativeUrl||''),size:f.Length||f.size||0};});
+          }
         }
       }
     }catch(e){}
   }
+  /* Try 3: Fallback to _attachName field value */
   if(!files){
     var _fn=a._attachName||'';
     var _fl=_fn.split(/[,;]+/).map(function(x){return x.trim();}).filter(function(x){return x;});
     if(_fl.length){
-      var origin=siteOrigin(ctx.siteUrl);
       files=_fl.map(function(fn){return{name:fn,webUrl:ctx.siteUrl+'/Lists/'+encodeURIComponent(ctx.listName)+'/Attachments/'+a._listItemId+'/'+encodeURIComponent(fn),size:0};});
     }
   }
