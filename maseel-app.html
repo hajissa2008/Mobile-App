@@ -1786,7 +1786,7 @@ function openSheet(id){
       try{var dd=JSON.parse(localStorage.getItem('maseel_docs')||'{}');var dfs=dd[id]||[];for(var di=0;di<dfs.length;di++){var d=dfs[di];dh+='<div style="position:relative;display:inline-flex;align-items:center;gap:4px;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600"><span style="color:var(--t1);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escH(d.name)+'</span><span style="color:var(--bl);cursor:pointer" onclick="var a=document.createElement(\'a\');a.href=\''+d.data+'\';a.download=\''+d.name.replace(/'/g,"\\'")+'\';a.click()">⬇</span><span style="color:var(--t3);cursor:pointer;font-size:10px" onclick="event.stopPropagation();removeDoc(\''+id.replace(/'/g,"\\'")+'\','+di+');rSheet()">✕</span></div>';}}catch(e){}
       return dh;})()+
     '</div></div>'+
-    '<div id="att-sec-'+id.replace(/[^a-zA-Z0-9_-]/g,'_')+'"><div class="sh-sec"><div class="sh-sl">Shop Drawings</div></div></div>'+
+    '<div id="att-sec-'+id.replace(/[^a-zA-Z0-9_-]/g,'_')+'"><div class="sh-sec"><div class="sh-sl">Attachment</div></div></div>'+
     '<div class="sh-sec"><div class="sh-sl">Activity Log</div><div id="act-log">'+renderLogs(id)+'</div></div>'+
     '<div class="sh-btns">'+
       '<button class="btn-cal idle-cal" id="bcal" onclick="addCal()">'+I.cal+'<span id="bcaltx"> Calendar</span></button>'+
@@ -2068,16 +2068,14 @@ function siteOrigin(url){try{return new URL(url).origin;}catch(e){return url;}}
 function renderAttHtml(id,files,noBtnMsg){
   if(!ST._atts)ST._atts={};
   ST._atts[id]=files.map(function(f){return{name:f.name,url:f.webUrl};});
-  var h='<div class="sh-sec"><div class="sh-sl">Shop Drawings</div>';
+  var h='<div class="sh-sec"><div class="sh-sl">Attachment</div><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">';
   for(var i=0;i<files.length;i++){
-    var ext=files[i].name.split('.').pop().toLowerCase();
-    var isImg=['jpg','jpeg','png','gif','bmp','webp','svg'].indexOf(ext)>=0;
-    h+='<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--bd)"><span>'+(isImg?'\ud83d\uddbc':'\ud83d\udcc4')+'</span><span style="flex:1;color:var(--t1);font-weight:600;font-size:12px">'+escH(files[i].name)+'</span><button style="background:rgba(59,130,246,.12);color:var(--bl);border:0;padding:4px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit" onclick="openAtt(\''+id.replace(/'/g,"\\'")+'\','+i+')">Open</button></div>';
-  }return h+'</div>';
+    h+='<div style="position:relative;display:inline-flex;align-items:center;gap:4px;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600"><span style="color:var(--t1);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escH(files[i].name)+'</span><span style="color:var(--bl);cursor:pointer" onclick="openAtt(\''+id.replace(/'/g,"\\'")+'\','+i+')">⬇</span></div>';
+  }return h+'</div></div>';
 }
 function renderFallbackBtn(ctx,id){
   var itemUrl=ctx.siteUrl+'/Lists/'+encodeURIComponent(ctx.listName)+'/DispForm.aspx?ID='+id;
-  return'<div class="sh-sec"><div class="sh-sl">Shop Drawings</div><button onclick="window.open(\''+itemUrl.replace(/'/g,"\\'")+'\',\'_blank\')" style="background:rgba(59,130,246,.12);color:var(--bl);border:0;padding:10px 14px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;width:100%;display:flex;align-items:center;gap:6px;justify-content:center"><span style="font-size:16px">\ud83d\udcc1</span> Shop Drawings</button></div>';
+  return'<div class="sh-sec"><div class="sh-sl">Attachment</div><button class="ph-btn" onclick="window.open(\''+itemUrl.replace(/'/g,"\\'")+'\',\'_blank\')" style="font-size:12px">📎 Browse Attachment</button></div>';
 }
 async function loadAttachmentsAsync(id){
   var sid='att-sec-'+id.replace(/[^a-zA-Z0-9_-]/g,'_');
