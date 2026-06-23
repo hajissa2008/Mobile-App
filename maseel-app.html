@@ -2068,7 +2068,7 @@ async function loadAttachmentsAsync(id){
   if(!a||!a._listItemId||!ctx||!ctx.siteUrl){el.innerHTML='';return;}
   /* Check for filenames stored in a custom text column (skipping True/False bool from built-in Attachments field) */
   var files=null;
-  var _fn=a._attachName||'';var _isBool=_fn.toLowerCase()==='true'||_fn.toLowerCase()==='false'||_fn==='1'||_fn==='0';
+  var _fn=String(a._attachName||'');var _isBool=_fn.toLowerCase()==='true'||_fn.toLowerCase()==='false'||_fn==='1'||_fn==='0';
   if(!_isBool){var _fl=_fn.split(/[,;]+/).map(function(x){return x.trim();}).filter(function(x){return x;});if(_fl.length)files=_fl.map(function(fn){return{name:fn,webUrl:ctx.siteUrl+'/Lists/'+encodeURIComponent(ctx.listName)+'/Attachments/'+a._listItemId+'/'+encodeURIComponent(fn),size:0};});}
   if(files&&files.length){
     if(!ST._atts)ST._atts={};
