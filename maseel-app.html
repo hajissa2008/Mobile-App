@@ -2060,28 +2060,49 @@ function openAtt(id,idx){
   if(ats&&ats[idx])window.open(ats[idx].url,'_blank');
 }
 function siteOrigin(url){try{return new URL(url).origin;}catch(e){return url;}}
+function renderAttHtml(id,files,noBtnMsg){
+  if(!ST._atts)ST._atts={};
+  ST._atts[id]=files.map(function(f){return{name:f.name,url:f.webUrl};});
+  var h='<div class="sh-sec"><div class="sh-sl">Shop Drawings</div>';
+  for(var i=0;i<files.length;i++){
+    var ext=files[i].name.split('.').pop().toLowerCase();
+    var isImg=['jpg','jpeg','png','gif','bmp','webp','svg'].indexOf(ext)>=0;
+    h+='<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--bd)"><span>'+(isImg?'\ud83d\uddbc':'\ud83d\udcc4')+'</span><span style="flex:1;color:var(--t1);font-weight:600;font-size:12px">'+escH(files[i].name)+'</span><button style="background:rgba(59,130,246,.12);color:var(--bl);border:0;padding:4px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit" onclick="openAtt(\''+id.replace(/'/g,"\\'")+'\','+i+')">Open</button></div>';
+  }return h+'</div>';
+}
+function renderFallbackBtn(ctx,id){
+  var itemUrl=ctx.siteUrl+'/Lists/'+encodeURIComponent(ctx.listName)+'/DispForm.aspx?ID='+id;
+  return'<div class="sh-sec"><div class="sh-sl">Shop Drawings</div><button onclick="window.open(\''+itemUrl.replace(/'/g,"\\'")+'\',\'_blank\')" style="background:rgba(59,130,246,.12);color:var(--bl);border:0;padding:10px 14px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;width:100%;display:flex;align-items:center;gap:6px;justify-content:center"><span style="font-size:16px">\ud83d\udcc1</span> Shop Drawings</button></div>';
+}
 async function loadAttachmentsAsync(id){
   var sid='att-sec-'+id.replace(/[^a-zA-Z0-9_-]/g,'_');
   var el=document.getElementById(sid);
   if(!el)return;
   var a=acOf(id);var ctx=listCtx();
   if(!a||!a._listItemId||!ctx||!ctx.siteUrl){el.innerHTML='';return;}
-  /* Check for filenames stored in a custom text column (skipping True/False bool from built-in Attachments field) */
-  var files=null;
+  /* Check custom text column first */
   var _fn=String(a._attachName||'');var _isBool=_fn.toLowerCase()==='true'||_fn.toLowerCase()==='false'||_fn==='1'||_fn==='0';
-  if(!_isBool){var _fl=_fn.split(/[,;]+/).map(function(x){return x.trim();}).filter(function(x){return x;});if(_fl.length)files=_fl.map(function(fn){return{name:fn,webUrl:ctx.siteUrl+'/Lists/'+encodeURIComponent(ctx.listName)+'/Attachments/'+a._listItemId+'/'+encodeURIComponent(fn),size:0};});}
-  if(files&&files.length){
-    if(!ST._atts)ST._atts={};
-    ST._atts[id]=files.map(function(f){return{name:f.name,url:f.webUrl};});
-    var h='<div class="sh-sec"><div class="sh-sl">Shop Drawings</div>';
-    for(var i=0;i<files.length;i++){
-      var ext=files[i].name.split('.').pop().toLowerCase();
-      var isImg=['jpg','jpeg','png','gif','bmp','webp','svg'].indexOf(ext)>=0;
-      h+='<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--bd)"><span>'+(isImg?'\ud83d\uddbc':'\ud83d\udcc4')+'</span><span style="flex:1;color:var(--t1);font-weight:600;font-size:12px">'+escH(files[i].name)+'</span><button style="background:rgba(59,130,246,.12);color:var(--bl);border:0;padding:4px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit" onclick="openAtt(\''+id.replace(/'/g,"\\'")+'\','+i+')">Open</button></div>';
-    }h+='</div>';el.innerHTML=h;
-  }else{
-    var itemUrl=ctx.siteUrl+'/Lists/'+encodeURIComponent(ctx.listName)+'/DispForm.aspx?ID='+a._listItemId;
-    el.innerHTML='<div class="sh-sec"><div class="sh-sl">Shop Drawings</div><button onclick="window.open(\''+itemUrl.replace(/'/g,"\\'")+'\',\'_blank\')" style="background:rgba(59,130,246,.12);color:var(--bl);border:0;padding:10px 14px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;width:100%;display:flex;align-items:center;gap:6px;justify-content:center"><span style="font-size:16px">\ud83d\udcc1</span> Shop Drawings</button></div>';
+  if(!_isBool){var _fl=_fn.split(/[,;]+/).map(function(x){return x.trim();}).filter(function(x){return x;});if(_fl.length){el.innerHTML=renderAttHtml(id,_fl.map(function(fn){return{name:fn,webUrl:ctx.siteUrl+'/Lists/'+encodeURIComponent(ctx.listName)+'/Attachments/'+a._listItemId+'/'+encodeURIComponent(fn)};}));return;}}
+  /* Show fallback button immediately */
+  el.innerHTML=renderFallbackBtn(ctx,a._listItemId);
+  /* Try Graph API in background with short timeout */
+  function tFetch(url,opt,ms){return new Promise(function(rr){var c=new AbortController();var t=setTimeout(function(){c.abort();rr(null);},ms||5000);fetch(url,Object.assign({signal:c.signal},opt||{})).then(function(x){clearTimeout(t);rr(x);}).catch(function(){clearTimeout(t);rr(null);});});}
+  var token=await getGraphToken();
+  if(token){
+    try{
+      var r1=await tFetch(GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/drive/root:/Attachments/'+a._listItemId+':/children?$select=name,webUrl,size',{headers:{'Authorization':'Bearer '+token}});
+      if(r1&&r1.ok){var d1=await r1.json();if(d1.value&&d1.value.length){var files=d1.value.map(function(f){return{name:f.name,webUrl:f.webUrl};});el.innerHTML=renderAttHtml(id,files);return;}}
+    }catch(e){}
+  }
+  if(AUTH.instance&&AUTH.user){
+    try{
+      var spR=await Promise.race([AUTH.instance.acquireTokenSilent({scopes:[ctx.siteUrl+'/.default'],account:AUTH.user}),new Promise(function(_,rj){setTimeout(function(){rj('timeout');},5000);})]);
+      if(spR&&spR.accessToken){
+        var origin=siteOrigin(ctx.siteUrl);
+        var r2=await tFetch(origin+'/_api/web/lists/getbytitle(\''+encodeURIComponent(ctx.listName).replace(/'/g,"''")+'\')/items('+a._listItemId+')/AttachmentFiles',{headers:{'Authorization':'Bearer '+spR.accessToken,'Accept':'application/json'}});
+        if(r2&&r2.ok){var d2=await r2.json();var f2=d2.d?d2.d.results:(d2.value||[]);if(f2.length){var spFiles=f2.map(function(f){return{name:f.FileName||f.name||'',webUrl:origin+(f.ServerRelativeUrl||'')};});el.innerHTML=renderAttHtml(id,spFiles);return;}}
+      }
+    }catch(e){}
   }
 }
 function disconnectList(){
