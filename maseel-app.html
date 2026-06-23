@@ -436,6 +436,7 @@ textarea::placeholder{color:var(--t3)}
 </div>
 <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none">
 <input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none">
+<input type="file" id="file-attach-input" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" style="display:none">
 
 <!-- Safety timer runs before SheetJS CDN (must not block) -->
 <script>
@@ -547,6 +548,8 @@ function loadPhotos(){try{var d=localStorage.getItem('maseel_photos');return d?J
 function savePhotos(p){try{localStorage.setItem('maseel_photos',JSON.stringify(p));}catch(e){}}
 function getPhoto(id){var p=loadPhotos();return p[id]||null;}
 function storePhoto(id, dataUrl){var p=loadPhotos();p[id]=dataUrl;savePhotos(p);}
+function removePhoto(id){var p=loadPhotos();delete p[id];savePhotos(p);}
+function removeDoc(id,idx){try{var d=JSON.parse(localStorage.getItem('maseel_docs')||'{}');if(d[id]){d[id].splice(idx,1);if(!d[id].length)delete d[id];localStorage.setItem('maseel_docs',JSON.stringify(d));}}catch(e){}}
 function removePhoto(id){var p=loadPhotos();delete p[id];savePhotos(p);}
 
 /* ── Audit Log ── */
@@ -1777,9 +1780,11 @@ function openSheet(id){
     '<div class="sh-sec"><div class="sh-sl">Inspection Notes</div>'+
       '<textarea id="shno" placeholder="Add site notes…">'+escH(a.notes||(ST.overrides[a.id]?ST.overrides[a.id].notes:'')||'')+'</textarea></div>'+
     '<div id="insp-container">'+inspSection(id)+'</div>'+
-    '<div class="sh-sec"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'+
-      '<button class="ph-btn" onclick="attachPhoto()">📷 Photo</button>'+
-      (getPhoto(id)?'<span style="font-size:12px;font-weight:700;color:var(--gr);cursor:pointer;text-decoration:underline" onclick="showPhoto(\''+getPhoto(id)+'\')">photo.jpeg</span>':'')+
+    '<div class="sh-sec"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+      '<button class="ph-btn" onclick="attachFile()">📎 Attach Image/DOC</button>'+(function(){var dh='';
+      var po=getPhoto(id);if(po)dh+='<div style="position:relative;display:inline-block"><img src="'+po+'" style="width:60px;height:60px;border-radius:6px;object-fit:cover;cursor:pointer" onclick="showPhoto(\''+po+'\')"><span style="position:absolute;top:-4px;right:-4px;font-size:11px;cursor:pointer;background:var(--bg2);border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;border:1px solid var(--bd);color:var(--t3)" onclick="event.stopPropagation();if(ST.selId){removePhoto(ST.selId);rSheet()}">✕</span></div>';
+      try{var dd=JSON.parse(localStorage.getItem('maseel_docs')||'{}');var dfs=dd[id]||[];for(var di=0;di<dfs.length;di++){var d=dfs[di];dh+='<div style="position:relative;display:inline-flex;align-items:center;gap:4px;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600"><span style="color:var(--t1);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escH(d.name)+'</span><span style="color:var(--bl);cursor:pointer" onclick="var a=document.createElement(\'a\');a.href=\''+d.data+'\';a.download=\''+d.name.replace(/'/g,"\\'")+'\';a.click()">⬇</span><span style="color:var(--t3);cursor:pointer;font-size:10px" onclick="event.stopPropagation();removeDoc(\''+id.replace(/'/g,"\\'")+'\','+di+');rSheet()">✕</span></div>';}}catch(e){}
+      return dh;})()+
     '</div></div>'+
     '<div id="att-sec-'+id.replace(/[^a-zA-Z0-9_-]/g,'_')+'"><div class="sh-sec"><div class="sh-sl">Shop Drawings</div></div></div>'+
     '<div class="sh-sec"><div class="sh-sl">Activity Log</div><div id="act-log">'+renderLogs(id)+'</div></div>'+
@@ -2230,6 +2235,43 @@ function attachPhoto(){
       img.src=ev.target.result;
     };
     reader.readAsDataURL(file);
+  };
+}
+function attachFile(){
+  var el=document.getElementById('file-attach-input');
+  if(!el)return;
+  el.value='';
+  el.click();
+  el.onchange=function(e){
+    var file=e.target.files[0];if(!file)return;
+    if(file.type.indexOf('image/')===0){
+      var reader=new FileReader();
+      reader.onload=function(ev){
+        var img=new Image();
+        img.onload=function(){
+          var max=800,c=document.createElement('canvas'),r=Math.min(max/img.width,max/img.height,1);
+          c.width=img.width*r;c.height=img.height*r;
+          var x=c.getContext('2d');x.drawImage(img,0,0,c.width,c.height);
+          var dataUrl=c.toDataURL('image/jpeg',0.7);
+          if(ST.selId){storePhoto(ST.selId,dataUrl);showToast('✓ Image attached');rSheet();}
+        };
+        img.src=ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    }else{
+      var reader=new FileReader();
+      reader.onload=function(ev){
+        if(ST.selId){
+          if(!ST._docs)try{ST._docs=JSON.parse(localStorage.getItem('maseel_docs')||'{}');}catch(e){ST._docs={};}
+          if(!ST._docs[ST.selId])ST._docs[ST.selId]=[];
+          ST._docs[ST.selId].push({name:file.name,data:ev.target.result,type:file.type});
+          try{localStorage.setItem('maseel_docs',JSON.stringify(ST._docs));}catch(e){}
+          showToast('✓ '+file.name+' attached');rSheet();
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+    el.value='';
   };
 }
 function rSheet(){if(ST.selId)openSheet(ST.selId);}
