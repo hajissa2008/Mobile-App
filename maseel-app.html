@@ -1781,7 +1781,7 @@ function openSheet(id){
       '<button class="ph-btn" onclick="attachPhoto()">📷 Photo</button>'+
       (getPhoto(id)?'<span style="font-size:12px;font-weight:700;color:var(--gr);cursor:pointer;text-decoration:underline" onclick="showPhoto(\''+getPhoto(id)+'\')">photo.jpeg</span>':'')+
     '</div></div>'+
-    '<div id="att-sec-'+id.replace(/[^a-zA-Z0-9_-]/g,'_')+'"><div class="sh-sec"><div class="sh-sl">Attachments</div><div style="font-size:12px;font-weight:600;color:var(--t3);padding:8px 0">\u231B Loading\u2026</div></div></div>'+
+    '<div id="att-sec-'+id.replace(/[^a-zA-Z0-9_-]/g,'_')+'"><div class="sh-sec"><div class="sh-sl">Shop Drawings</div></div></div>'+
     '<div class="sh-sec"><div class="sh-sl">Activity Log</div><div id="act-log">'+renderLogs(id)+'</div></div>'+
     '<div class="sh-btns">'+
       '<button class="btn-cal idle-cal" id="bcal" onclick="addCal()">'+I.cal+'<span id="bcaltx"> Calendar</span></button>'+
@@ -2073,16 +2073,15 @@ async function loadAttachmentsAsync(id){
   if(files&&files.length){
     if(!ST._atts)ST._atts={};
     ST._atts[id]=files.map(function(f){return{name:f.name,url:f.webUrl};});
-    var h='<div class="sh-sec"><div class="sh-sl">Attachments</div>';
+    var h='<div class="sh-sec"><div class="sh-sl">Shop Drawings</div>';
     for(var i=0;i<files.length;i++){
       var ext=files[i].name.split('.').pop().toLowerCase();
       var isImg=['jpg','jpeg','png','gif','bmp','webp','svg'].indexOf(ext)>=0;
       h+='<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--bd)"><span>'+(isImg?'\ud83d\uddbc':'\ud83d\udcc4')+'</span><span style="flex:1;color:var(--t1);font-weight:600;font-size:12px">'+escH(files[i].name)+'</span><button style="background:rgba(59,130,246,.12);color:var(--bl);border:0;padding:4px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit" onclick="openAtt(\''+id.replace(/'/g,"\\'")+'\','+i+')">Open</button></div>';
     }h+='</div>';el.innerHTML=h;
   }else{
-    /* Always show the SharePoint folder link — instant, no API calls */
     var itemUrl=ctx.siteUrl+'/Lists/'+encodeURIComponent(ctx.listName)+'/DispForm.aspx?ID='+a._listItemId;
-    el.innerHTML='<div class="sh-sec"><div class="sh-sl">Attachments</div><button onclick="window.open(\''+itemUrl.replace(/'/g,"\\'")+'\',\'_blank\')" style="background:rgba(59,130,246,.12);color:var(--bl);border:0;padding:10px 14px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;width:100%;display:flex;align-items:center;gap:6px;justify-content:center"><span style="font-size:16px">\ud83d\udcc1</span> Browse Attachments in SharePoint</button></div>';
+    el.innerHTML='<div class="sh-sec"><div class="sh-sl">Shop Drawings</div><button onclick="window.open(\''+itemUrl.replace(/'/g,"\\'")+'\',\'_blank\')" style="background:rgba(59,130,246,.12);color:var(--bl);border:0;padding:10px 14px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;width:100%;display:flex;align-items:center;gap:6px;justify-content:center"><span style="font-size:16px">\ud83d\udcc1</span> Shop Drawings</button></div>';
   }
 }
 function disconnectList(){
