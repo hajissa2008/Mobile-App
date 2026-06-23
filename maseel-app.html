@@ -1781,7 +1781,7 @@ function openSheet(id){
       '<button class="ph-btn" onclick="attachPhoto()">📷 Photo</button>'+
       (getPhoto(id)?'<span style="font-size:12px;font-weight:700;color:var(--gr);cursor:pointer;text-decoration:underline" onclick="showPhoto(\''+getPhoto(id)+'\')">photo.jpeg</span>':'')+
     '</div></div>'+
-    '<div id="att-sec-'+id.replace(/[^a-zA-Z0-9_-]/g,'_')+'"></div>'+
+    '<div id="att-sec-'+id.replace(/[^a-zA-Z0-9_-]/g,'_')+'"><div class="sh-sec"><div class="sh-sl">Attachments</div><div style="font-size:12px;font-weight:600;color:var(--t3);padding:8px 0">\u231B Loading\u2026</div></div></div>'+
     '<div class="sh-sec"><div class="sh-sl">Activity Log</div><div id="act-log">'+renderLogs(id)+'</div></div>'+
     '<div class="sh-btns">'+
       '<button class="btn-cal idle-cal" id="bcal" onclick="addCal()">'+I.cal+'<span id="bcaltx"> Calendar</span></button>'+
