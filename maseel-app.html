@@ -2066,59 +2066,44 @@ async function loadAttachmentsAsync(id){
   if(!el)return;
   var a=acOf(id);var ctx=listCtx();
   if(!a||!a._listItemId||!ctx||!ctx.siteUrl){el.innerHTML='';return;}
-  function tFetch(url,opt,ms){return new Promise(function(rr){var c=new AbortController();var t=setTimeout(function(){c.abort();rr(null);},ms||8000);fetch(url,Object.assign({signal:c.signal},opt||{})).then(function(x){clearTimeout(t);rr(x);}).catch(function(){clearTimeout(t);rr(null);});});}
   var files=null;
-  /* Try 1: Graph API drive Attachments folder */
+  /* Attempt to fetch filenames via Graph API / SharePoint API */
+  function tFetch(url,opt,ms){return new Promise(function(rr){var c=new AbortController();var t=setTimeout(function(){c.abort();rr(null);},ms||8000);fetch(url,Object.assign({signal:c.signal},opt||{})).then(function(x){clearTimeout(t);rr(x);}).catch(function(){clearTimeout(t);rr(null);});});}
   var token=await getGraphToken();
   if(token){
-    var u1=GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/drive/root:/Attachments/'+a._listItemId+':/children?$select=name,webUrl,size';
-    var r1=await tFetch(u1,{headers:{'Authorization':'Bearer '+token}});
-    if(r1&&r1.ok)try{var d1=await r1.json();if(d1.value&&d1.value.length)files=d1.value;}catch(e){}
+    try{
+      var r1=await tFetch(GRAPH_SITES_BASE+SITE_ID+'/lists/'+SCHED_LIST_ID+'/drive/root:/Attachments/'+a._listItemId+':/children?$select=name,webUrl,size',{headers:{'Authorization':'Bearer '+token}});
+      if(r1&&r1.ok){var d1=await r1.json();if(d1.value&&d1.value.length)files=d1.value;}
+    }catch(e){}
   }
-  /* Try 2: SharePoint REST API */
   if(!files&&AUTH.instance&&AUTH.user){
-    var spToken=null;
     try{
       var spR=await Promise.race([AUTH.instance.acquireTokenSilent({scopes:[ctx.siteUrl+'/.default'],account:AUTH.user}),new Promise(function(_,rj){setTimeout(function(){rj('timeout');},6000);})]);
-      if(spR&&spR.accessToken)spToken=spR.accessToken;
+      if(spR&&spR.accessToken){
+        var origin=siteOrigin(ctx.siteUrl);
+        var r2=await tFetch(origin+'/_api/web/lists/getbytitle(\''+encodeURIComponent(ctx.listName).replace(/'/g,"''")+'\')/items('+a._listItemId+')/AttachmentFiles',{headers:{'Authorization':'Bearer '+spR.accessToken,'Accept':'application/json'}});
+        if(r2&&r2.ok){var d2=await r2.json();var f2=d2.d?d2.d.results:(d2.value||[]);if(f2.length)files=f2.map(function(f){return{name:f.FileName||f.name||'',webUrl:origin+(f.ServerRelativeUrl||''),size:f.Length||f.size||0};});}
+      }
     }catch(e){}
-    if(spToken){
-      var origin=siteOrigin(ctx.siteUrl);
-      var spUrl=origin+'/_api/web/lists/getbytitle(\''+encodeURIComponent(ctx.listName).replace(/'/g,"''")+'\')/items('+a._listItemId+')/AttachmentFiles';
-      var spRes=await tFetch(spUrl,{headers:{'Authorization':'Bearer '+spToken,'Accept':'application/json'}});
-      if(spRes&&spRes.ok)try{
-        var spD=await spRes.json();
-        var spF=spD.d?spD.d.results:(spD.value||[]);
-        if(spF.length)files=spF.map(function(f){return{name:f.FileName||f.name||'',webUrl:origin+(f.ServerRelativeUrl||''),size:f.Length||f.size||0};});
-      }catch(e){}
-    }
   }
-  /* Try 3: _attachName text column (if it contains actual filenames, not a boolean) */
   if(!files){
-    var _fn=a._attachName||'';
-    var _isBool=_fn.toLowerCase()==='true'||_fn.toLowerCase()==='false'||_fn==='1'||_fn==='0';
-    if(!_isBool){
-      var _fl=_fn.split(/[,;]+/).map(function(x){return x.trim();}).filter(function(x){return x;});
-      if(_fl.length)files=_fl.map(function(fn){return{name:fn,webUrl:ctx.siteUrl+'/Lists/'+encodeURIComponent(ctx.listName)+'/Attachments/'+a._listItemId+'/'+encodeURIComponent(fn),size:0};});
-    }
+    var _fn=a._attachName||'';var _isBool=_fn.toLowerCase()==='true'||_fn.toLowerCase()==='false'||_fn==='1'||_fn==='0';
+    if(!_isBool){var _fl=_fn.split(/[,;]+/).map(function(x){return x.trim();}).filter(function(x){return x;});if(_fl.length)files=_fl.map(function(fn){return{name:fn,webUrl:ctx.siteUrl+'/Lists/'+encodeURIComponent(ctx.listName)+'/Attachments/'+a._listItemId+'/'+encodeURIComponent(fn),size:0};});}
   }
-  /* Render if files found; otherwise show fallback browse button */
-  var h='<div class="sh-sec"><div class="sh-sl">Attachments</div>';
+  if(!ST._atts)ST._atts={};
   if(files&&files.length){
-    if(!ST._atts)ST._atts={};
     ST._atts[id]=files.map(function(f){return{name:f.name,url:f.webUrl};});
+    var h='<div class="sh-sec"><div class="sh-sl">Attachments</div>';
     for(var i=0;i<files.length;i++){
       var ext=files[i].name.split('.').pop().toLowerCase();
       var isImg=['jpg','jpeg','png','gif','bmp','webp','svg'].indexOf(ext)>=0;
       h+='<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--bd)"><span>'+(isImg?'\ud83d\uddbc':'\ud83d\udcc4')+'</span><span style="flex:1;color:var(--t1);font-weight:600;font-size:12px">'+escH(files[i].name)+'</span><button style="background:rgba(59,130,246,.12);color:var(--bl);border:0;padding:4px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit" onclick="openAtt(\''+id.replace(/'/g,"\\'")+'\','+i+')">Open</button></div>';
     }
+    h+='</div>';el.innerHTML=h;
   }else{
-    /* Fallback: direct link to the SharePoint attachments folder page */
     var folderUrl=ctx.siteUrl+'/Lists/'+encodeURIComponent(ctx.listName)+'/Attachments/'+a._listItemId+'/';
-    h+='<button onclick="window.open(\''+folderUrl.replace(/'/g,"\\'")+'\',\'_blank\')" style="background:rgba(59,130,246,.12);color:var(--bl);border:0;padding:8px 12px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;width:100%">\ud83d\udcc1 Browse Attachments in SharePoint</button>';
+    el.innerHTML='<div class="sh-sec"><div class="sh-sl">Attachments</div><button onclick="window.open(\''+folderUrl.replace(/'/g,"\\'")+'\',\'_blank\')" style="background:rgba(59,130,246,.12);color:var(--bl);border:0;padding:10px 14px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;width:100%;display:flex;align-items:center;gap:6px;justify-content:center"><span style="font-size:16px">\ud83d\udcc1</span> Browse Attachments in SharePoint</button></div>';
   }
-  h+='</div>';
-  el.innerHTML=h;
 }
 function disconnectList(){
   try{localStorage.removeItem('maseel_list_ctx');}catch(e){}
