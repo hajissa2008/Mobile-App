@@ -566,18 +566,24 @@ function userName(email){
 }
 async function resolveUserNames(emails){
   var c=loadUserNameCache(),need=[];
-  for(var i=0;i<emails.length;i++){var e=emails[i].toLowerCase().trim();if(!c[e])need.push(e);}
+  for(var i=0;i<emails.length;i++){var e=emails[i].toLowerCase().trim();if(e.indexOf('@')>0&&!c[e])need.push(e);}
   if(!need.length)return;
-  for(var j=0;j<need.length;j++){
-    var token=await getGraphToken();
-    if(!token)break;
+  var token=await getGraphToken();
+  if(!token)return;
+  try{
+    var filter=need.map(function(m){return "mail eq '"+m.replace(/'/g,"''")+"'";}).join(' or ');
+    if(filter.length>3000)filter=need.slice(0,20).map(function(m){return "mail eq '"+m.replace(/'/g,"''")+"'";}).join(' or ');
+    var res=await fetch('https://graph.microsoft.com/v1.0/users?$filter='+encodeURIComponent(filter)+'&$select=displayName,mail,id&$top=999',{headers:{'Authorization':'Bearer '+token}});
+    if(res.ok){var d=await res.json();if(d.value){for(var i=0;i<d.value.length;i++){if(d.value[i].mail&&d.value[i].displayName)c[d.value[i].mail.toLowerCase()]=d.value[i].displayName;}saveUserNameCache(c);}}
+  }catch(e){}
+  /* Also try individual user lookup as fallback (User.Read allows reading self) */
+  for(var i=0;i<need.length;i++){
+    if(c[need[i]])continue;
     try{
-      var email=encodeURIComponent(need[j]);
-      var res=await fetch('https://graph.microsoft.com/v1.0/users/'+email+'?$select=displayName,id',{headers:{'Authorization':'Bearer '+token}});
-      if(res.ok){var d=await res.json();if(d.displayName){c[need[j]]=d.displayName;}}
+      var res2=await fetch('https://graph.microsoft.com/v1.0/users/'+encodeURIComponent(need[i])+'?$select=displayName',{headers:{'Authorization':'Bearer '+token}});
+      if(res2.ok){var d2=await res2.json();if(d2.displayName){c[need[i]]=d2.displayName;saveUserNameCache(c);}}
     }catch(e){}
   }
-  saveUserNameCache(c);
 }
 
 /* ── Audit Log ── */
@@ -630,6 +636,19 @@ var NOTIFY_EMAIL = 'm.hajissa@alenshaiah.com';
 var INSPECT_EMAIL = 'h.shehata@alenshaiah.com';
 var ADMIN_EMAILS = ['m.hajissa@alenshaiah.com'];
 var INSPECTOR_EMAILS = ['h.shehata@alenshaiah.com'];
+
+/* Known user display names (fallback when Graph API /users is unavailable) */
+function seedUserNames(){
+  var c=loadUserNameCache(),dirty=false;
+  var known={'m.hajissa@alenshaiah.com':'Muhannad AlHaj Issa','h.shehata@alenshaiah.com':'Hazem Shehata'};
+  for(var k in known){if(!c[k.toLowerCase()]){c[k.toLowerCase()]=known[k];dirty=true;}}
+  /* Also try to resolve current user's name via self-lookup */
+  if(dirty)saveUserNameCache(c);
+  if(AUTH&&AUTH.user&&AUTH.user.name&&AUTH.user.username){
+    var cu=AUTH.user.username.toLowerCase();
+    if(!c[cu]){c[cu]=AUTH.user.name;saveUserNameCache(c);}
+  }
+}
 
 /* SharePoint list connection config (stored in localStorage) */
 function listCtx(){
@@ -1028,8 +1047,7 @@ function loginMsal(){
     AUTH._profile=resp.account.name||resp.account.username||'';
     try{localStorage.setItem('msal_profile',AUTH._profile);}catch(e){}try{localStorage.setItem('msal_user',resp.account.username);}catch(e){}
     fetchLive().then(function(){
-      try{rToday();}catch(e){}try{rTimeline();}catch(e){}try{rProfile();}catch(e){}
-      hideLoginScreen();
+      try{rToday();}catch(e){}try{rTimeline();}catch(e){}try{rProfile();}catch(e){}seedUserNames();hideLoginScreen();
       var pending=sessionStorage.getItem('maseel_pending');
       if(pending){sessionStorage.removeItem('maseel_pending');
         if(pending==='token'){showToast('✓ Graph permission granted');try{rProfile();}catch(e){}setTimeout(syncAll,500);}
@@ -1895,7 +1913,7 @@ function assigneeChips(id){
   if(!list.length)return'<span style="font-size:12px;font-weight:600;color:var(--t3)">None assigned</span>';
   return list.map(function(e){
     var nm=userName(e);
-    var label=nm&&nm!==e?nm:e;
+    var label=nm&&nm!==e?nm:(function(x){var at=x.indexOf('@');if(at<0)return x;return x.substring(0,at).replace(/[._-]/g,' ').replace(/\b\w/g,function(l){return l.toUpperCase();});})(e);
     var rm=role==='admin'?'<span style="cursor:pointer;margin-left:4px;opacity:.6" onclick="removeAssignee(\''+id+'\',\''+e+'\')">✕</span>':'';
     return'<span style="background:rgba(59,130,246,.12);color:var(--bl);padding:5px 10px;border-radius:12px;font-size:12px;font-weight:600;display:inline-flex;align-items:center">'+label+rm+'</span>';
   }).join('');
