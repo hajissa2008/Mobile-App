@@ -554,6 +554,8 @@ function removeDoc(id,idx){try{var d=JSON.parse(localStorage.getItem('maseel_doc
 /* ── User Name Resolution (email → display name) ── */
 function loadUserNameCache(){try{var d=localStorage.getItem('maseel_user_names');return d?JSON.parse(d):{};}catch(e){return {};}}
 function saveUserNameCache(c){try{localStorage.setItem('maseel_user_names',JSON.stringify(c));}catch(e){}}
+function loadLookupIdCache(){try{var d=localStorage.getItem('maseel_lookup_ids');return d?JSON.parse(d):{};}catch(e){return {};}}
+function saveLookupIdCache(c){try{localStorage.setItem('maseel_lookup_ids',JSON.stringify(c));}catch(e){}}
 function userName(email){
   if(!email)return email;
   var c=loadUserNameCache();
@@ -640,7 +642,7 @@ var INSPECTOR_EMAILS = ['h.shehata@alenshaiah.com'];
 /* Known user display names (fallback when Graph API /users is unavailable) */
 function seedUserNames(){
   var c=loadUserNameCache(),dirty=false;
-  var known={'m.hajissa@alenshaiah.com':'Muhannad AlHaj Issa','h.shehata@alenshaiah.com':'Hazem Shehata'};
+  var known={'m.hajissa@alenshaiah.com':'Muhannad AlHaj Issa','h.shehata@alenshaiah.com':'Hazem Shehata','m.abdulaziz@alenshaiah.com':'Mohammad Abdulaziz','m.saleh@alenshaiah.com':'Munther Saleh','a.elagouz@alenshaiah.com':'Amr AlAgouz','r.eldessouki@alenshaiah.com':'Ramy ElDessouki','a.rageh@alenshaiah.com':'Ali Rageh'};
   for(var k in known){if(!c[k.toLowerCase()]){c[k.toLowerCase()]=known[k];dirty=true;}}
   /* Also try to resolve current user's name via self-lookup */
   if(dirty)saveUserNameCache(c);
@@ -926,10 +928,11 @@ function listItemToActivity(fields, itemId){
     responsibleList:(function(){
       var r=fields.Responsible||fields.field_8||fields.field_9;
       if(r==null||r==='')return[];
-      var ra=[];
+      var ra=[],nc=loadUserNameCache(),lc=loadLookupIdCache(),dirty=false,ldirty=false;
       function addItem(v){
         if(v==null||v==='')return;
-        if(typeof v==='object'&&v.LookupValue){ra.push(v.Email||v.LookupValue);return;}
+        if(typeof v==='object'&&v.LookupValue&&v.Email){var e=v.Email.toLowerCase().trim();ra.push(e);if(!nc[e]){nc[e]=v.LookupValue;dirty=true;}if(!lc[e]||lc[e]!==v.LookupId){lc[e]=v.LookupId;ldirty=true;}return;}
+        if(typeof v==='object'&&v.LookupValue){ra.push(v.LookupValue);return;}
         if(typeof v==='string'){ra.push(v);return;}
       }
       if(Array.isArray(r)){for(var i=0;i<r.length;i++)addItem(r[i]);}
@@ -937,6 +940,8 @@ function listItemToActivity(fields, itemId){
       else if(typeof r==='object'){addItem(r);}
       else addItem(r);
       if(typeof r==='string'){ra=r.split(/[,;]+/).map(function(x){return x.trim().toLowerCase();}).filter(function(x){return x;});}
+      if(dirty)saveUserNameCache(nc);
+      if(ldirty)saveLookupIdCache(lc);
       return ra;
     })(),
     totalQty:num(fields.field_2),
@@ -2041,7 +2046,9 @@ async function syncAll(){
       if(o.st){fields.field_10=o.st;}
       if(o.notes){fields.field_11=o.notes;}
       if(o.responsibleList){
-        fields.field_8=o.responsibleList.join('; ');
+        var lc=loadLookupIdCache();
+        var lids=o.responsibleList.map(function(e){return lc[e.toLowerCase().trim()];}).filter(function(id){return id!=null;});
+        if(lids.length)fields.ResponsibleLookupId=lids.length>1?lids:lids[0];
       }
       var ok=await updateListItem(token, itemId, fields);
       if(ok){synced++;
@@ -2191,7 +2198,11 @@ async function saveToExcel(id, st, pc, notes, quiet){
   if(st)fields.field_10=st;
   if(notes)fields.field_11=notes;
   var resp=(o&&o.responsibleList?o.responsibleList.join('; '):'').trim();
-  if(resp)fields.field_8=resp;
+  if(resp){
+    var lc=loadLookupIdCache();
+    var lids=o.responsibleList.map(function(e){return lc[e.toLowerCase().trim()];}).filter(function(id){return id!=null;});
+    if(lids.length)fields.ResponsibleLookupId=lids.length>1?lids:lids[0];
+  }
   var ok=await updateListItem(token, itemId, fields);
   if(ok){ST.syncQ=Math.max(0,ST.syncQ-1);updBadge();if(!quiet)showToast('✓ Synced to SharePoint');return true;}
   else{if(!quiet)showToast('Sync failed');return false;}
