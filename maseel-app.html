@@ -1500,7 +1500,7 @@ function rToday(){
   for(var i=0;i<vAC.length;i++){
     var a=vAC[i];var st=effSt(a);
     var isActive=(!a.s||a.s<=DATA_DATE)&&(!a.f||a.f>=DATA_DATE);
-    var isOverdue=a.f&&a.f<=DATA_DATE&&st!=='ACC Done'&&st!=='SDC Done';
+    var isOverdue=a.f&&a.f<DATA_DATE&&st!=='ACC Done'&&st!=='SDC Done';
     if(tf){
       if(tf==='Not Started'&&st!=='Not Started')continue;
       else if(tf==='Overdue'&&!isOverdue)continue;
@@ -1537,7 +1537,7 @@ function rToday(){
   }
   /* KPI counts from all visible activities (by status, regardless of date range) */
   var kNs=0,kOv=0,kIp=0,kFi=0,kPi=0,kAc=0,kSd=0;
-  for(var i=0;i<vAC.length;i++){var a=vAC[i],s=effSt(a),isOverdue=a.f&&a.f<=DATA_DATE&&s!=='ACC Done'&&s!=='SDC Done';
+  for(var i=0;i<vAC.length;i++){var a=vAC[i],s=effSt(a),isOverdue=a.f&&a.f<DATA_DATE&&s!=='ACC Done'&&s!=='SDC Done';
     if(s==='Not Started')kNs++;
     if(isOverdue)kOv++;
     if(s==='In Progress')kIp++;
